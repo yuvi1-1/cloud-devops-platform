@@ -37,6 +37,14 @@ jobs:
         run: |
           aws sts get-caller-identity
 
+      - name: Verify EKS cluster
+        run: |
+          aws eks describe-cluster \
+            --region $AWS_REGION \
+            --name $EKS_CLUSTER \
+            --query 'cluster.status' \
+            --output text
+
       - name: Update kubeconfig
         run: |
           aws eks update-kubeconfig \
