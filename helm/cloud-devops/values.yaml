@@ -1,9 +1,9 @@
 replicaCount: 2
 
 image:
-  repository: cloud-devops-platform
-  tag: "1.0"
-  pullPolicy: IfNotPresent
+  repository: ghcr.io/yuvi1-1/cloud-devops-platform
+  tag: "latest"
+  pullPolicy: Always
 
 service:
   type: ClusterIP
