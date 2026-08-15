@@ -3,7 +3,7 @@ replicaCount: 2
 image:
   repository: ghcr.io/yuvi1-1/cloud-devops-platform
   tag: "latest"
-  pullPolicy: Always
+  pullPolicy: IfNotPresent
 
 service:
   type: ClusterIP
