@@ -1,4 +1,4 @@
-name: Build and Deploy
+name: CI/CD
 
 on:
   push:
@@ -7,20 +7,23 @@ on:
 
 env:
   IMAGE_NAME: ghcr.io/yuvi1-1/cloud-devops-platform
+  AWS_REGION: ap-south-1
+  EKS_CLUSTER: cloud-devops-cluster
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     permissions:
       contents: read
       packages: write
+      id-token: write
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Log in to GHCR
+      - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -38,3 +41,34 @@ jobs:
         run: |
           docker push $IMAGE_NAME:${{ github.sha }}
           docker push $IMAGE_NAME:latest
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::403659231418:role/GitHubActions-CloudDevOps
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS identity
+        run: |
+          aws sts get-caller-identity
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region $AWS_REGION \
+            --name $EKS_CLUSTER
+
+      - name: Deploy with Helm
+        run: |
+          helm upgrade --install cloud-devops helm/cloud-devops \
+            --set image.repository=$IMAGE_NAME \
+            --set image.tag=${{ github.sha }}
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/cloud-devops-app --timeout=180s
+
+      - name: Verify deployment
+        run: |
+          kubectl get deployment cloud-devops-app
+          kubectl get pods -l app=cloud-devops-app
