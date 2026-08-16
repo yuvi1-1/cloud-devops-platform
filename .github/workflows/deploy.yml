@@ -1,6 +1,14 @@
 name: CD
 
 on:
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: "Deploy to EKS"
+        required: true
+        default: false
+        type: boolean
+
   workflow_run:
     workflows: ["CI"]
     types:
@@ -13,7 +21,7 @@ env:
 
 jobs:
   build-and-deploy:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
 
     permissions:
