@@ -1,5 +1,11 @@
 replicaCount: 2
 
+deploymentStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 1
+
 image:
   repository: ghcr.io/yuvi1-1/cloud-devops-platform
   tag: "latest"
@@ -15,6 +21,16 @@ ingress:
   className: nginx
   host: cloud-devops.local
   path: /
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 70
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
 
 resources:
   requests:
