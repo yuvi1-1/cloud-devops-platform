@@ -3,8 +3,7 @@
 # `global.imageTag` is rewritten by the CI pipeline (.github/workflows/ci.yml).
 # ─────────────────────────────────────────────────────────────────────────────
 global:
-  imageTag: main
-
+  imageTag: da3aa45035c98835ece383c3cb27e72efddb416f
 api:
   logLevel: debug
   # Synthetic history so the dashboard is populated in a fresh environment.
@@ -15,21 +14,18 @@ api:
     enabled: true
     steps:
       - setWeight: 25
-      - pause: { duration: 1m }
+      - pause: {duration: 1m}
       - setWeight: 50
-      - pause: { duration: 1m }
+      - pause: {duration: 1m}
   autoscaling:
     minReplicas: 2
     maxReplicas: 6
-
 web:
   autoscaling:
     minReplicas: 2
     maxReplicas: 4
-
 database:
   mode: internal
-
 monitoring:
   podMonitor:
     enabled: true
