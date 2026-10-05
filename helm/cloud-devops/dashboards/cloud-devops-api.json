@@ -268,7 +268,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "count(up{service=~\".*-api\"} == 1)",
+          "expr": "count(up{app=\"cloud-devops-api\"} == 1)",
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"

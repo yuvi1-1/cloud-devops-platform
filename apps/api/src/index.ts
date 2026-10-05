@@ -1,5 +1,5 @@
 import { setTimeout as sleep } from 'node:timers/promises';
-import { loadConfig } from './config.js';
+import { loadConfig, usesPostgres } from './config.js';
 import { MemoryRepository } from './db/memory.js';
 import { migrate } from './db/migrations.js';
 import { PostgresRepository, createPool } from './db/postgres.js';
@@ -11,10 +11,11 @@ async function main() {
   const config = loadConfig();
 
   let repo: DeploymentRepository;
-  if (config.DATABASE_URL) {
+  if (usesPostgres(config)) {
     const pool = createPool({
       connectionString: config.DATABASE_URL,
       ssl: config.DATABASE_SSL,
+      sslCaFile: config.DATABASE_SSL_CA_FILE,
       max: config.DATABASE_POOL_MAX,
     });
     if (config.MIGRATE_ON_START) await migrate(pool, (m) => console.log(JSON.stringify({ level: 30, msg: m })));

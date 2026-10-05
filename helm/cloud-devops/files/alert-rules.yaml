@@ -1,10 +1,9 @@
-# Alerting rules for the API (RED method). The same expressions are rendered as a
-# PrometheusRule by the Helm chart for kube-prometheus-stack in the cluster.
+# Alerting rules for the API (RED method). Mounted by docker compose and rendered into a PrometheusRule by the chart.
 groups:
   - name: cloud-devops-api
     rules:
       - alert: CloudDevopsApiDown
-        expr: up{service=~".*-api"} == 0
+        expr: up{app="cloud-devops-api"} == 0
         for: 2m
         labels:
           severity: critical

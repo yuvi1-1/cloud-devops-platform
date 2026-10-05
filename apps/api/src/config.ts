@@ -11,9 +11,17 @@ const EnvSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 
-  /** When unset the API falls back to an in-memory store (local demos & unit tests). */
+  /**
+   * PostgreSQL connection. Either a DATABASE_URL, or the standard libpq
+   * variables (PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD) which avoid
+   * URL-encoding problems with generated passwords. With neither set, the API
+   * falls back to an in-memory store (local demos & unit tests).
+   */
   DATABASE_URL: z.string().url().optional(),
+  PGHOST: z.string().min(1).optional(),
   DATABASE_SSL: booleanFromEnv,
+  /** PEM bundle to trust for TLS to the database (e.g. the Amazon RDS CA bundle). */
+  DATABASE_SSL_CA_FILE: z.string().optional(),
   DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
   MIGRATE_ON_START: booleanFromEnv,
 
@@ -35,6 +43,8 @@ const EnvSchema = z.object({
 });
 
 export type Config = z.infer<typeof EnvSchema>;
+
+export const usesPostgres = (c: Config) => Boolean(c.DATABASE_URL || c.PGHOST);
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const parsed = EnvSchema.safeParse(env);

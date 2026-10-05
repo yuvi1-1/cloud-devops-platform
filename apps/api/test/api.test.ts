@@ -180,6 +180,12 @@ describe('config', () => {
     expect(() => loadConfig({ PORT: 'not-a-port' })).toThrow(/Invalid configuration/);
     expect(() => loadConfig({ INGEST_TOKEN: 'short' })).toThrow(/INGEST_TOKEN/);
   });
+  it('detects postgres from DATABASE_URL or libpq variables', async () => {
+    const { usesPostgres } = await import('../src/config.js');
+    expect(usesPostgres(loadConfig({}))).toBe(false);
+    expect(usesPostgres(loadConfig({ PGHOST: 'db' }))).toBe(true);
+    expect(usesPostgres(loadConfig({ DATABASE_URL: 'postgres://u:p@db:5432/x' }))).toBe(true);
+  });
   it('applies defaults', () => {
     const c = loadConfig({});
     expect(c.PORT).toBe(3000);

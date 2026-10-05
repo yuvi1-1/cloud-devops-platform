@@ -11,5 +11,5 @@ scrape_configs:
     static_configs:
       - targets: ["api:3000"]
         labels:
-          service: cloud-devops-api
+          app: cloud-devops-api
           namespace: compose

@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "cloud-devops.fullname" . }}-smoke-test
+  labels:
+    {{- include "cloud-devops.labels" . | nindent 4 }}
+    app.kubernetes.io/component: test
+    cloud-devops.io/client: "true"
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 100
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: smoke
+      image: {{ .Values.tests.image }}
+      command: ["sh", "-c"]
+      args:
+        - |
+          set -eu
+          {{- if .Values.web.enabled }}
+          echo "→ web /healthz"
+          curl -fsS --retry 10 --retry-all-errors --retry-delay 3 http://{{ include "cloud-devops.web.fullname" . }}:{{ .Values.service.port }}/healthz
+          echo "→ web serves the SPA shell"
+          curl -fsS http://{{ include "cloud-devops.web.fullname" . }}:{{ .Values.service.port }}/ | grep -q '<div id="root">'
+          {{- end }}
+          {{- if .Values.api.enabled }}
+          echo "→ api /readyz (includes database)"
+          curl -fsS --retry 10 --retry-all-errors --retry-delay 3 http://{{ include "cloud-devops.api.fullname" . }}:{{ .Values.service.port }}/readyz
+          echo "→ api DORA endpoint"
+          curl -fsS "http://{{ include "cloud-devops.api.fullname" . }}:{{ .Values.service.port }}/api/v1/dora?environment=prod&days=7" | grep -q deploymentFrequency
+          {{- end }}
+          echo "✔ smoke tests passed"
+      resources:
+        requests: { cpu: 10m, memory: 16Mi }
+        limits: { cpu: 100m, memory: 64Mi }
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]

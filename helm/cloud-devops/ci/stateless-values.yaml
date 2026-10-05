@@ -1,0 +1,14 @@
+# chart-testing / CI: no database, autoscaling off
+database:
+  mode: none
+web:
+  autoscaling:
+    enabled: false
+api:
+  seedDemoData: true
+  autoscaling:
+    enabled: false
+ingress:
+  enabled: false
+networkPolicy:
+  enabled: false
