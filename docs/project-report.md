@@ -5,7 +5,7 @@
 | | |
 |---|---|
 | Submitted by | Yuvraj Pegu (231210129) |
-| Guide | Dr Gunjan, Depsrtment of CSE |
+| Supervisor | Dr Gunjan, Department of CSE |
 | Department | Department of Computer Science & Engineering |
 | Institution | NIT Delhi |
 | Academic year | 2023–27 |
