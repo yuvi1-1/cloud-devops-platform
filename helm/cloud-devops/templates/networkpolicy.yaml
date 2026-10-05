@@ -19,7 +19,7 @@ spec:
   policyTypes: [Ingress, Egress]
 {{- if .Values.web.enabled }}
 ---
-# 2) Web: only the ingress controller may connect; egress limited to DNS.
+# 2) Web: only the gateway / ingress data plane may connect; egress limited to DNS.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -33,9 +33,11 @@ spec:
   policyTypes: [Ingress, Egress]
   ingress:
     - from:
+        {{- range $np.ingressNamespaces }}
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: {{ $np.ingressControllerNamespace }}
+              kubernetes.io/metadata.name: {{ . }}
+        {{- end }}
         - podSelector:
             matchLabels:
               cloud-devops.io/client: "true"
@@ -46,7 +48,7 @@ spec:
 {{- end }}
 {{- if .Values.api.enabled }}
 ---
-# 3) API: ingress controller + Prometheus (metrics) in; DNS + PostgreSQL out.
+# 3) API: gateway + Prometheus (metrics) in; DNS + PostgreSQL out.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -60,9 +62,11 @@ spec:
   policyTypes: [Ingress, Egress]
   ingress:
     - from:
+        {{- range $np.ingressNamespaces }}
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: {{ $np.ingressControllerNamespace }}
+              kubernetes.io/metadata.name: {{ . }}
+        {{- end }}
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ $np.monitoringNamespace }}

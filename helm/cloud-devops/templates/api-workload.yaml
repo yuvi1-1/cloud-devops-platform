@@ -28,10 +28,13 @@ spec:
       canaryService: {{ include "cloud-devops.api.fullname" . }}-canary
       maxUnavailable: 0
       maxSurge: 1
-      {{- if .Values.ingress.enabled }}
+      {{- if .Values.gateway.enabled }}
+      # Precise traffic split on the HTTPRoute (Argo Rollouts Gateway API plugin).
       trafficRouting:
-        nginx:
-          stableIngress: {{ include "cloud-devops.api.fullname" . }}
+        plugins:
+          argoproj-labs/gatewayAPI:
+            httpRoute: {{ include "cloud-devops.api.fullname" . }}
+            namespace: {{ .Release.Namespace }}
       {{- end }}
       {{- if .Values.api.rollout.analysis.enabled }}
       # Background analysis runs for the whole rollout; a failure aborts and

@@ -1,0 +1,25 @@
+# Checkov configuration — accepted risks are documented in docs/security.md
+compact: true
+quiet: true
+skip-check:
+  # Registry modules are pinned by version constraint + .terraform.lock.hcl
+  - CKV_TF_1
+  # AZ list is sliced to var.az_count, so new AZs never change the result
+  - CKV_AWS_394
+  # Default AWS-managed KMS key is sufficient for a non-regulated workload
+  - CKV_AWS_149
+  # Ingest token is rotated by re-applying Terraform (no Lambda rotator)
+  - CKV2_AWS_57
+  # State bucket: access logs / event notifications / CRR are cost-prohibitive here
+  - CKV_AWS_18
+  - CKV2_AWS_62
+  - CKV_AWS_144
+  # Kubernetes: namespaces are assigned by Argo CD at deploy time
+  - CKV_K8S_21
+  # Kubernetes: images are pinned to immutable commit SHAs (digests in prod via CI)
+  - CKV_K8S_43
+  - CKV_K8S_15
+  # Kubernetes: libpq reads PGPASSWORD from the environment
+  - CKV_K8S_35
+  # Kubernetes: upstream images run as their documented UIDs (nginx 101, postgres 70)
+  - CKV_K8S_40
