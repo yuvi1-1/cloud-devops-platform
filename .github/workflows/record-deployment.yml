@@ -1,0 +1,143 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Records a deployment in the platform's own DORA API — the project measures
+# itself. Marks the deployment in_progress, waits until the environment really
+# serves the new version (Argo CD sync + canary), then marks it succeeded or
+# failed. Lead time = commit time → version live.
+#
+# Configure (Settings → Secrets and variables → Actions):
+#   vars.DORA_API_URL   base URL of the API that stores events (e.g. prod)
+#   vars.DEV_URL        base URL of the dev environment
+#   vars.PROD_URL       base URL of the prod environment
+#   vars.AWS_ROLE_ARN   (optional) fetch the ingest token from Secrets Manager
+#   secrets.INGEST_TOKEN (alternative to AWS_ROLE_ARN)
+# The job is skipped gracefully when these are not set.
+# ─────────────────────────────────────────────────────────────────────────────
+name: Record deployment
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: true
+      tag:
+        type: string
+        required: true
+  # Prod changes land through a reviewed promotion PR.
+  push:
+    branches: [main]
+    paths:
+      - gitops/environments/prod/values.yaml
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        options: [dev, prod]
+        default: dev
+      tag:
+        description: Image tag / commit SHA (empty = value in gitops/environments/<env>/values.yaml)
+        type: string
+        required: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  record:
+    name: Record ${{ inputs.environment || 'prod' }} deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ENVIRONMENT: ${{ inputs.environment || 'prod' }}
+      DORA_API_URL: ${{ vars.DORA_API_URL }}
+      DEV_URL: ${{ vars.DEV_URL }}
+      PROD_URL: ${{ vars.PROD_URL }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tag and target
+        id: ctx
+        run: |
+          tag="${{ inputs.tag }}"
+          [[ -z "$tag" ]] && tag=$(yq '.global.imageTag' "gitops/environments/$ENVIRONMENT/values.yaml")
+          if [[ "$ENVIRONMENT" == "prod" ]]; then target="$PROD_URL"; else target="$DEV_URL"; fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "target=$target" >> "$GITHUB_OUTPUT"
+          if [[ -z "$DORA_API_URL" || -z "$target" ]]; then
+            echo "::notice::DORA tracking not configured (vars.DORA_API_URL / vars.${ENVIRONMENT^^}_URL) — skipping."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+          if git cat-file -e "$tag^{commit}" 2>/dev/null; then
+            echo "commit_ts=$(git log -1 --format=%cI "$tag")" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: AWS credentials (OIDC)
+        if: steps.ctx.outputs.enabled == 'true' && vars.AWS_ROLE_ARN != ''
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'ap-south-1' }}
+
+      - name: Ingest token
+        if: steps.ctx.outputs.enabled == 'true'
+        id: token
+        env:
+          FALLBACK: ${{ secrets.INGEST_TOKEN }}
+        run: |
+          if [[ -n "${{ vars.AWS_ROLE_ARN }}" ]]; then
+            token=$(aws secretsmanager get-secret-value --secret-id cloud-devops/ingest-token --query SecretString --output text)
+          else
+            token="$FALLBACK"
+          fi
+          [[ -n "$token" ]] || { echo "::error::no ingest token available"; exit 1; }
+          echo "::add-mask::$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
+      - name: Mark deployment in progress
+        if: steps.ctx.outputs.enabled == 'true'
+        id: start
+        env:
+          TOKEN: ${{ steps.token.outputs.token }}
+          TAG: ${{ steps.ctx.outputs.tag }}
+          COMMIT_TS: ${{ steps.ctx.outputs.commit_ts }}
+        run: |
+          body=$(jq -n --arg env "$ENVIRONMENT" --arg tag "$TAG" --arg ts "$COMMIT_TS" --arg by "github-actions" '{
+            service: "cloud-devops", environment: $env, version: $tag[0:12], commitSha: $tag[0:40],
+            triggeredBy: $by } + (if $ts != "" then {commitTimestamp: $ts} else {} end)')
+          id=$(curl -fsS -X POST "$DORA_API_URL/api/v1/deployments" \
+            -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d "$body" | jq -r .id)
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          echo "Recorded deployment $id"
+
+      - name: Wait until ${{ steps.ctx.outputs.target }} serves the new version
+        if: steps.ctx.outputs.enabled == 'true'
+        id: wait
+        env:
+          TARGET: ${{ steps.ctx.outputs.target }}
+          TAG: ${{ steps.ctx.outputs.tag }}
+        run: |
+          deadline=$((SECONDS + 20 * 60))
+          while (( SECONDS < deadline )); do
+            live=$(curl -fsS -m 5 "$TARGET/api/v1/info" | jq -r .version || true)
+            echo "live version: ${live:-unreachable}"
+            if [[ "$live" == "$TAG" ]]; then echo "status=succeeded" >> "$GITHUB_OUTPUT"; exit 0; fi
+            sleep 20
+          done
+          echo "status=failed" >> "$GITHUB_OUTPUT"
+
+      - name: Mark deployment ${{ steps.wait.outputs.status }}
+        if: always() && steps.start.outputs.id != ''
+        env:
+          TOKEN: ${{ steps.token.outputs.token }}
+          ID: ${{ steps.start.outputs.id }}
+          STATUS: ${{ steps.wait.outputs.status || 'failed' }}
+        run: |
+          curl -fsS -X PATCH "$DORA_API_URL/api/v1/deployments/$ID" \
+            -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+            -d "{\"status\":\"$STATUS\"}" | jq '{id, status, startedAt, finishedAt}'
+          [[ "$STATUS" == "succeeded" ]]

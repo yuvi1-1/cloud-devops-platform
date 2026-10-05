@@ -6,6 +6,11 @@ metadata:
   name: {{ include "cloud-devops.api.fullname" . }}
   labels:
     {{- include "cloud-devops.componentLabels" $c | nindent 4 }}
+  {{- if .Values.api.rollout.enabled }}
+  annotations:
+    # Pods belong to an Argo Rollout, which kube-linter cannot resolve.
+    ignore-check.kube-linter.io/dangling-service: "selects pods of an Argo Rollout"
+  {{- end }}
 spec:
   type: ClusterIP
   selector:
@@ -25,6 +30,8 @@ metadata:
   labels:
     {{- include "cloud-devops.componentLabels" $c | nindent 4 }}
     cloud-devops.io/role: canary
+  annotations:
+    ignore-check.kube-linter.io/dangling-service: "selects pods of an Argo Rollout"
 spec:
   type: ClusterIP
   selector:

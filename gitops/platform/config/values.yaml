@@ -14,6 +14,8 @@ gateway:
     https: 30443
 
 policies:
+  # Requires Kyverno (disabled by scripts/kind-up.sh in direct mode)
+  enabled: true
   validationFailureAction: Audit
   # Images allowed in application namespaces
   allowedRegistries:

@@ -34,6 +34,7 @@ gateway:
   letsEncryptEmail: ""
 
 policies:
+  enabled: true
   # Audit (report only) or Enforce (block non-compliant workloads)
   validationFailureAction: Audit
 

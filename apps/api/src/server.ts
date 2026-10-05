@@ -67,6 +67,16 @@ export async function buildApp({ config, repo, state = { shuttingDown: false } }
     return reply.status(status).send({ error: status >= 500 ? 'InternalServerError' : err.name, message: err.message });
   });
 
+  // ── Fault injection (demo of automated canary rollback) ─────────────────────
+  if (config.CHAOS_ERROR_RATE > 0) {
+    app.log.warn({ rate: config.CHAOS_ERROR_RATE }, 'chaos mode enabled: injecting HTTP 500s');
+    app.addHook('onRequest', async (request, reply) => {
+      if (request.url.startsWith('/api/v1/') && Math.random() < config.CHAOS_ERROR_RATE) {
+        return reply.status(500).send({ error: 'InjectedFault', message: 'chaos mode' });
+      }
+    });
+  }
+
   // ── Auth for write endpoints ────────────────────────────────────────────────
   const expectedToken = config.INGEST_TOKEN ? sha256(config.INGEST_TOKEN) : null;
   async function requireIngestToken(request: FastifyRequest, reply: FastifyReply) {

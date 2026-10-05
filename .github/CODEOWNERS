@@ -1,0 +1,5 @@
+# Changes to infrastructure, delivery and environments need owner review.
+*                    @yuvi1-1
+/infra/              @yuvi1-1
+/gitops/             @yuvi1-1
+/.github/workflows/  @yuvi1-1
