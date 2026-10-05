@@ -430,6 +430,9 @@
             },
             "caKey": {
               "type": "string"
+            },
+            "caFile": {
+              "type": "string"
             }
           }
         },

@@ -37,6 +37,7 @@ module "external_secrets_pod_identity" {
   external_secrets_ssm_parameter_arns = []
   external_secrets_secrets_manager_arns = concat(
     [aws_secretsmanager_secret.ingest_token.arn],
+    [for s in aws_secretsmanager_secret.db : s.arn],
     var.create_rds ? [aws_db_instance.this[0].master_user_secret[0].secret_arn] : [],
   )
 

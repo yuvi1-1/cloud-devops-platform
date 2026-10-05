@@ -149,9 +149,11 @@ app.kubernetes.io/component: {{ .component }}
 {{- if and (eq .Values.database.mode "external") .Values.database.external.ssl }}
 - name: DATABASE_SSL
   value: "true"
-{{- if .Values.database.external.caConfigMap }}
 - name: DATABASE_SSL_CA_FILE
+{{- if .Values.database.external.caConfigMap }}
   value: /etc/ssl/database/{{ .Values.database.external.caKey }}
+{{- else }}
+  value: {{ .Values.database.external.caFile | quote }}
 {{- end }}
 {{- end }}
 {{- end }}

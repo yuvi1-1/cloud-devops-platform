@@ -1,0 +1,132 @@
+{{- $tls := .Values.gateway.letsEncryptEmail }}
+# How Envoy proxies are exposed: an AWS NLB on EKS, fixed NodePorts on kind.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: platform-proxy
+  namespace: envoy-gateway-system
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyDeployment:
+        replicas: {{ eq .Values.cluster.provider "eks" | ternary 2 1 }}
+        container:
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { memory: 512Mi }
+      envoyService:
+        {{- if eq .Values.cluster.provider "eks" }}
+        type: LoadBalancer
+        annotations:
+          service.beta.kubernetes.io/aws-load-balancer-type: external
+          service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+          service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+          service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+        {{- else }}
+        type: NodePort
+        patch:
+          type: StrategicMerge
+          value:
+            spec:
+              ports:
+                - port: 80
+                  nodePort: {{ .Values.gateway.kindNodePorts.http }}
+                {{- if $tls }}
+                - port: 443
+                  nodePort: {{ .Values.gateway.kindNodePorts.https }}
+                {{- end }}
+        {{- end }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: envoy
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  parametersRef:
+    group: gateway.envoyproxy.io
+    kind: EnvoyProxy
+    name: platform-proxy
+    namespace: envoy-gateway-system
+---
+# One shared Gateway (one load balancer) for every environment. Application
+# teams attach HTTPRoutes from namespaces labelled cloud-devops.io/gateway-access.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: platform-gateway
+  namespace: envoy-gateway-system
+  {{- if $tls }}
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  {{- end }}
+spec:
+  gatewayClassName: envoy
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              cloud-devops.io/gateway-access: "true"
+    {{- if $tls }}
+    {{- range $name, $host := dict "dev" .Values.gateway.devHostname "prod" .Values.gateway.prodHostname }}
+    - name: https-{{ $name }}
+      protocol: HTTPS
+      port: 443
+      hostname: {{ $host | quote }}
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: platform-gateway-{{ $name }}-tls
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              cloud-devops.io/gateway-access: "true"
+    {{- end }}
+    {{- end }}
+{{- if $tls }}
+---
+# Redirect plain HTTP to HTTPS (ACME HTTP-01 challenges are matched first by
+# the more specific routes cert-manager creates).
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: https-redirect
+  namespace: envoy-gateway-system
+spec:
+  parentRefs:
+    - name: platform-gateway
+      sectionName: http
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: {{ $tls }}
+    privateKeySecretRef:
+      name: letsencrypt-prod-account
+    solvers:
+      - http01:
+          gatewayHTTPRoute:
+            parentRefs:
+              - name: platform-gateway
+                namespace: envoy-gateway-system
+                kind: Gateway
+{{- end }}

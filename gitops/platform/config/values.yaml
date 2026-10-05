@@ -1,0 +1,31 @@
+# Overridden by the bootstrap chart (gitops/bootstrap) with cluster facts.
+cluster:
+  provider: eks
+  name: cloud-devops-cluster
+  region: ap-south-1
+
+gateway:
+  devHostname: dev.cloud-devops.localtest.me
+  prodHostname: cloud-devops.localtest.me
+  letsEncryptEmail: ""
+  # kind: host ports mapped by local/kind-config.yaml
+  kindNodePorts:
+    http: 30080
+    https: 30443
+
+policies:
+  validationFailureAction: Audit
+  # Images allowed in application namespaces
+  allowedRegistries:
+    - "ghcr.io/yuvi1-1/*"
+    - "postgres:*"
+    - "docker.io/library/postgres:*"
+    - "curlimages/curl:*"
+  # Images that must carry a valid keyless cosign signature from this repo's CI
+  signedImages:
+    - "ghcr.io/yuvi1-1/cloud-devops-platform/*"
+  signatureSubject: "https://github.com/yuvi1-1/cloud-devops-platform/.github/workflows/*"
+
+appNamespaces:
+  - cloud-devops-dev
+  - cloud-devops-prod

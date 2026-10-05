@@ -24,3 +24,8 @@ create_github_oidc_provider = true
 github_repository = "yuvi1-1/cloud-devops-platform"
 gitops_repo_url   = "https://github.com/yuvi1-1/cloud-devops-platform.git"
 gitops_revision   = "main"
+
+# Public hostnames (create CNAME records pointing at the NLB after apply).
+dev_hostname      = "dev.cloud-devops.example.com"
+prod_hostname     = "cloud-devops.example.com"
+letsencrypt_email = ""

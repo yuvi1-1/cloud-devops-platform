@@ -1,0 +1,5 @@
+apiVersion: v2
+name: gitops-bootstrap
+description: App-of-apps that declares every platform add-on and application environment as Argo CD Applications.
+type: application
+version: 1.0.0
