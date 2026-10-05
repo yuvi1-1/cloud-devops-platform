@@ -5,7 +5,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Stage 1 — build the static bundle with Vite
-FROM node:22-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /repo
 
 COPY package.json package-lock.json ./
