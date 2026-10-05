@@ -67,16 +67,19 @@ curl -fsS "$API/metrics" | grep -q 'deployments_recorded_total{service="e2e",env
 echo "✔ Prometheus metrics exported"
 
 step "NetworkPolicy: unlabelled pod must NOT reach the API or the database"
-probe() { # name target
+probe() { # name target write-out
   kubectl -n "$NS" run "$1" --rm -i --restart=Never --quiet --image=curlimages/curl:8.15.0 \
-    --overrides='{"spec":{"securityContext":{"runAsNonRoot":true,"runAsUser":100,"seccompProfile":{"type":"RuntimeDefault"}},"containers":[{"name":"'"$1"'","image":"curlimages/curl:8.15.0","args":["-s","-m","5","-o","/dev/null","-w","%{http_code}","'"$2"'"],"securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}}]}}' \
+    --overrides='{"spec":{"securityContext":{"runAsNonRoot":true,"runAsUser":100,"seccompProfile":{"type":"RuntimeDefault"}},"containers":[{"name":"'"$1"'","image":"curlimages/curl:8.15.0","args":["-s","--connect-timeout","4","-m","6","-o","/dev/null","-w","'"$3"'","'"$2"'"],"securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}}]}}' \
     2>/dev/null || true
 }
-out=$(probe np-probe-api http://cloud-devops-api/healthz)
-[[ $out == 200 ]] && fail "NetworkPolicy did not block access to the API"
-echo "✔ API unreachable from an arbitrary pod (got '${out:-timeout}')"
-out=$(probe np-probe-db telnet://cloud-devops-postgresql:5432)
-[[ -z $out || $out == 000 ]] || echo "note: database probe returned '$out'"
+out=$(probe np-probe-api http://cloud-devops-api/healthz '%{http_code}')
+[[ -n $out ]] || fail "probe pod could not run"
+[[ $out == 000 ]] || fail "NetworkPolicy did not block access to the API (HTTP $out)"
+echo "✔ API unreachable from an arbitrary pod"
+# time_connect stays 0 when the TCP handshake never completes.
+out=$(probe np-probe-db telnet://cloud-devops-postgresql:5432 '%{time_connect}')
+[[ -n $out ]] || fail "probe pod could not run"
+[[ $out == 0.000000 || $out == 0 ]] || fail "NetworkPolicy did not block access to PostgreSQL (connected in ${out}s)"
 echo "✔ PostgreSQL unreachable from an arbitrary pod"
 
 step "Zero-downtime rolling restart"
