@@ -4,6 +4,11 @@ updates:
     directory: /
     schedule: { interval: weekly, day: monday }
     open-pull-requests-limit: 5
+    # Major upgrades (e.g. TypeScript 7, ESLint 10, Vitest 5) are planned work,
+    # not automatic bumps.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       production:
         dependency-type: production
@@ -15,6 +20,10 @@ updates:
   - package-ecosystem: docker
     directories: [/apps/api, /apps/web]
     schedule: { interval: weekly }
+    # Stay on the Node.js LTS line chosen in .nvmrc; base-image patches still flow.
+    ignore:
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /

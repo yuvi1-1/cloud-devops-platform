@@ -234,7 +234,7 @@ Details: [docs/delivery-pipeline.md](docs/delivery-pipeline.md).
 | [Troubleshooting](docs/troubleshooting.md) | Real incidents from v1 and v2 with root causes |
 | [Demo guide](docs/demo-guide.md) | Scripted 15-minute live demo for the viva |
 | [Architecture decisions](docs/adr/) | Why Gateway API, GitOps, Rollouts, Pod Identity, … |
-| [Project report](docs/project-report.md) | Final-year report: problem, objectives, design, implementation, testing, results |
+| [Project report](docs/project-report.md) ([Word version](docs/Project-Report.docx)) | Final-year report: problem, objectives, design, implementation, testing, results |
 | [Viva preparation](docs/viva-questions.md) | Likely examiner questions with answers |
 
 ## License
