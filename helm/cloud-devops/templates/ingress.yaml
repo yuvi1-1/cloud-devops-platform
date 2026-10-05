@@ -1,26 +1,47 @@
 {{- if .Values.ingress.enabled }}
-
+{{- $tlsSecret := .Values.ingress.tls.secretName | default (printf "%s-tls" (include "cloud-devops.fullname" .)) }}
+{{- range $component := list "web" "api" }}
+{{- $v := index $.Values $component }}
+{{- if $v.enabled }}
+---
+# One Ingress per component on the same host: "/" → web, "/api" → api.
+# Splitting them lets Argo Rollouts add a canary Ingress for the API only.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
-
 metadata:
-  name: {{ .Release.Name }}-ingress
-
+  name: {{ include "cloud-devops.fullname" $ | trunc 59 }}-{{ $component }}
+  labels:
+    {{- include "cloud-devops.componentLabels" (dict "root" $ "component" $component) | nindent 4 }}
+  annotations:
+    {{- with $.Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- /* Only one Ingress requests the certificate; both share the TLS secret. */}}
+    {{- if and (eq $component "web") $.Values.ingress.tls.enabled $.Values.ingress.tls.clusterIssuer }}
+    cert-manager.io/cluster-issuer: {{ $.Values.ingress.tls.clusterIssuer }}
+    {{- end }}
+    {{- if $.Values.ingress.tls.enabled }}
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    {{- end }}
 spec:
-  ingressClassName: {{ .Values.ingress.className }}
-
+  ingressClassName: {{ $.Values.ingress.className }}
+  {{- if $.Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ $.Values.ingress.host | quote }}
+      secretName: {{ $tlsSecret }}
+  {{- end }}
   rules:
-    - host: {{ .Values.ingress.host }}
-
+    - host: {{ $.Values.ingress.host | quote }}
       http:
         paths:
-          - path: {{ .Values.ingress.path }}
+          - path: {{ eq $component "api" | ternary "/api" "/" }}
             pathType: Prefix
-
             backend:
               service:
-                name: {{ .Release.Name }}-service
+                name: {{ include "cloud-devops.fullname" $ | trunc 59 }}-{{ $component }}
                 port:
-                  number: {{ .Values.service.port }}
-
+                  name: http
+{{- end }}
+{{- end }}
 {{- end }}

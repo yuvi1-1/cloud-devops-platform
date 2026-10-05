@@ -1,0 +1,18 @@
+{{- if .Values.web.enabled }}
+{{- $c := dict "root" . "component" "web" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cloud-devops.web.fullname" . }}
+  labels:
+    {{- include "cloud-devops.componentLabels" $c | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "cloud-devops.selectorLabels" $c | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+{{- end }}

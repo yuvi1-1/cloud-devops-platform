@@ -2,7 +2,7 @@
  * Standalone migration entrypoint. Runs as a Helm pre-install/pre-upgrade hook
  * Job so schema changes are applied exactly once, before new pods roll out.
  */
-import { loadConfig } from './config.js';
+import { loadConfig, usesPostgres } from './config.js';
 import { migrate } from './db/migrations.js';
 import { createPool } from './db/postgres.js';
 
@@ -11,11 +11,16 @@ const log = (msg: string, extra: Record<string, unknown> = {}) =>
 
 async function run() {
   const config = loadConfig();
-  if (!config.DATABASE_URL) {
-    log('DATABASE_URL not set — nothing to migrate');
+  if (!usesPostgres(config)) {
+    log('no database configured (DATABASE_URL / PGHOST) — nothing to migrate');
     return;
   }
-  const pool = createPool({ connectionString: config.DATABASE_URL, ssl: config.DATABASE_SSL, max: 1 });
+  const pool = createPool({
+    connectionString: config.DATABASE_URL,
+    ssl: config.DATABASE_SSL,
+    sslCaFile: config.DATABASE_SSL_CA_FILE,
+    max: 1,
+  });
 
   // The database may still be starting (e.g. fresh install) — retry with backoff.
   for (let attempt = 1; ; attempt++) {

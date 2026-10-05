@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import pg from 'pg';
 import type {
   CreateDeploymentInput,
@@ -39,11 +40,21 @@ const toDeployment = (r: Row): Deployment => ({
   finishedAt: r.finished_at,
 });
 
-export function createPool(opts: { connectionString: string; ssl: boolean; max: number }): pg.Pool {
+export interface PoolOptions {
+  /** Omit to let `pg` read PGHOST/PGPORT/PGDATABASE/PGUSER/PGPASSWORD. */
+  connectionString?: string;
+  ssl: boolean;
+  sslCaFile?: string;
+  max: number;
+}
+
+export function createPool(opts: PoolOptions): pg.Pool {
   return new pg.Pool({
     connectionString: opts.connectionString,
     max: opts.max,
-    ssl: opts.ssl ? { rejectUnauthorized: true } : undefined,
+    ssl: opts.ssl
+      ? { rejectUnauthorized: true, ca: opts.sslCaFile ? readFileSync(opts.sslCaFile, 'utf8') : undefined }
+      : undefined,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 5_000,
     statement_timeout: 10_000,

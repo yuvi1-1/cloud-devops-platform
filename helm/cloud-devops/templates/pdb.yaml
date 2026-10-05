@@ -1,14 +1,20 @@
-{{- if .Values.podDisruptionBudget.enabled }}
+{{- range $component := list "web" "api" }}
+{{- $v := index $.Values $component }}
+{{- if and $v.enabled $v.podDisruptionBudget.enabled }}
+{{- $c := dict "root" $ "component" $component }}
+---
 apiVersion: policy/v1
 kind: PodDisruptionBudget
-
 metadata:
-  name: {{ .Release.Name }}-pdb
-
+  name: {{ include "cloud-devops.fullname" $ | trunc 59 }}-{{ $component }}
+  labels:
+    {{- include "cloud-devops.componentLabels" $c | nindent 4 }}
 spec:
-  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
-
+  minAvailable: {{ $v.podDisruptionBudget.minAvailable }}
+  # Allow evicting pods that are not Ready (e.g. stuck rollouts) so node drains don't hang.
+  unhealthyPodEvictionPolicy: AlwaysAllow
   selector:
     matchLabels:
-      app: cloud-devops-app
+      {{- include "cloud-devops.selectorLabels" $c | nindent 6 }}
+{{- end }}
 {{- end }}
