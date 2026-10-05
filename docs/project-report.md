@@ -279,7 +279,7 @@ React 19 with TypeScript and Vite. A polling hook refreshes data every 15 s with
 
 ### 5.4 Containers
 
-* API: three-stage build → `gcr.io/distroless/nodejs22-debian12:nonroot` with production dependencies only and the Amazon RDS CA bundle for verified TLS.
+* API: three-stage build → `gcr.io/distroless/nodejs22-debian13:nonroot` with production dependencies only and the Amazon RDS CA bundle for verified TLS.
 * Web: two-stage build → `nginx-unprivileged` on port 8080 with SPA routing, immutable asset caching and security headers.
 * Docker Compose reproduces the full stack including Prometheus and Grafana with read-only filesystems and dropped capabilities.
 
@@ -335,9 +335,9 @@ flowchart TB
 | T13 | Terraform plan (mocked): role name, OIDC subject scope, RDS opt-in | assertions hold | Pass |
 | T14 | Terraform plan with RDS: encrypted, private, managed password, forced TLS | assertions hold | Pass |
 | T15 | Terraform rejects `az_count = 1` | validation error | Pass |
-| T16 | E2E: helm test, ingest → DORA via PostgreSQL, Prometheus counter | pass | CI |
-| T17 | E2E: pod without allowed labels → API and DB | blocked | CI |
-| T18 | E2E: rolling restart keeps ready endpoints | no gap | CI |
+| T16 | E2E: helm test, ingest → DORA via PostgreSQL, Prometheus counter | pass | Pass (kind, CI) |
+| T17 | E2E: pod without allowed labels → API and DB | blocked | Pass (kind, CI) |
+| T18 | E2E: rolling restart keeps ready endpoints | no gap | Pass (kind, CI) |
 | T19 | k6: 20 VUs dashboard reads + CPU burn for 3 min | p95 < 500 ms, errors < 1% | 📋 |
 | T20 | Canary with 50% injected errors | aborted, traffic back to stable | 📋 |
 
@@ -353,6 +353,8 @@ flowchart TB
 | Terraform tests (mocked providers) | 3 runs, all assertions passed; `validate` and `tflint` clean |
 | Checkov (Terraform) | 54 passed, 0 failed (accepted risks documented) |
 | promtool (alert rules) | 4 rules valid |
+| GitHub Actions on PR #1 | first run blocked 2 images with critical CVEs (incl. an NGINX RCE) — fixed by patched base images; second run 9/9 checks green |
+| Kubernetes e2e on kind (CI) | 8/8 checks passed: smoke tests, 401 on unauthenticated write, ingest → DORA via PostgreSQL, Prometheus metric, API and DB isolation by NetworkPolicy, zero-downtime restart |
 
 **📋 Record after deployment** — fill from your own runs:
 
@@ -360,7 +362,7 @@ flowchart TB
 |---|---|
 | `terraform apply` duration (fresh account) | |
 | Time until all Argo CD apps Healthy | |
-| CI pipeline duration (PR / main) | |
+| CI pipeline duration (pull request) | ≈ 3 min (first green run: 3 m 15 s, 9/9 checks) |
 | Commit → live in dev (lead time from dashboard) | |
 | k6 p95 latency / error rate | |
 | HPA: time from load start to first scale-out | |

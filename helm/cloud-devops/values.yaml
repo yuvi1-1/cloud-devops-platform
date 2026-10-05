@@ -152,10 +152,11 @@ database:
   mode: internal
   name: devops
   user: devops
-  # Password Secret. With existingSecret empty the chart creates one from `password`.
+  # Password Secret. With existingSecret empty the chart creates one from
+  # `database.password`, which must then be supplied at install time
+  # (--set database.password=…). It is intentionally not defaulted here.
   existingSecret: ""
   passwordKey: password
-  password: ""
   external:
     host: ""
     port: 5432
