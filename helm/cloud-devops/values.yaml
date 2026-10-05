@@ -1,41 +1,253 @@
-replicaCount: 2
+# ─────────────────────────────────────────────────────────────────────────────
+# Cloud DevOps Platform — default values
+# Environment-specific overrides live in gitops/environments/<env>/values.yaml
+# ─────────────────────────────────────────────────────────────────────────────
 
-deploymentStrategy:
-  type: RollingUpdate
-  rollingUpdate:
-    maxUnavailable: 0
-    maxSurge: 1
+nameOverride: ""
+fullnameOverride: ""
 
-image:
-  repository: ghcr.io/yuvi1-1/cloud-devops-platform
-  tag: "latest"
-  pullPolicy: IfNotPresent
+# Deployment environment label shown in the UI / API (dev, staging, prod, local…)
+environment: local
 
+global:
+  # Default tag for both images; CI pins this to the commit SHA. Falls back to .Chart.AppVersion.
+  imageTag: ""
+  imagePullSecrets: []
+
+serviceAccount:
+  create: true
+  name: ""
+  # e.g. eks.amazonaws.com/role-arn for IRSA
+  annotations: {}
+
+# Pod-level security defaults applied to every workload in the chart.
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  privileged: false
+  capabilities:
+    drop: ["ALL"]
+
+# ── Web (React SPA served by unprivileged NGINX) ─────────────────────────────
+web:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: ghcr.io/yuvi1-1/cloud-devops-platform/web
+    tag: ""
+    digest: ""
+    pullPolicy: IfNotPresent
+  containerPort: 8080
+  runAsUser: 101
+  resources:
+    requests: { cpu: 25m, memory: 32Mi }
+    limits: { cpu: 250m, memory: 128Mi }
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# ── API (Fastify + PostgreSQL) ───────────────────────────────────────────────
+api:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: ghcr.io/yuvi1-1/cloud-devops-platform/api
+    tag: ""
+    digest: ""
+    pullPolicy: IfNotPresent
+  containerPort: 3000
+  runAsUser: 65532
+  logLevel: info
+  # Fill an empty environment with 60 days of synthetic history (demos only).
+  seedDemoData: false
+  # Exposes /api/v1/load?ms=N (CPU burn) to demonstrate the HPA. Keep off in prod.
+  enableLoadEndpoint: false
+  rateLimitPerMinute: 600
+  shutdownDelayMs: 5000
+  # Fault injection: share (0-1) of /api/v1 requests that return HTTP 500.
+  # Demo only — set it on a new release to watch the canary analysis roll it back.
+  chaosErrorRate: 0
+  extraEnv: []
+
+  # Bearer token CI/CD uses to POST deployment events.
+  ingestToken:
+    # Use an existing Secret (recommended: External Secrets / Sealed Secrets)…
+    existingSecret: ""
+    key: ingest-token
+    # …or let the chart create one from this value (min 16 chars). Empty = ingest disabled.
+    value: ""
+
+  migrations:
+    # Runs `dist/migrate.js` as an initContainer; an advisory lock serialises replicas.
+    enabled: true
+
+  resources:
+    requests: { cpu: 50m, memory: 96Mi }
+    limits: { cpu: 500m, memory: 256Mi }
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+    behavior:
+      scaleUp:
+        stabilizationWindowSeconds: 0
+        policies:
+          - { type: Percent, value: 100, periodSeconds: 30 }
+      scaleDown:
+        stabilizationWindowSeconds: 120
+        policies:
+          - { type: Percent, value: 50, periodSeconds: 60 }
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+  # Progressive delivery with Argo Rollouts (requires the Argo Rollouts controller).
+  # When enabled the API is rendered as a Rollout instead of a Deployment. With
+  # gateway.enabled, traffic weights are shifted precisely on the HTTPRoute via the
+  # Argo Rollouts Gateway API plugin; otherwise the canary weight follows pod counts.
+  rollout:
+    enabled: false
+    steps:
+      - setWeight: 20
+      - pause: { duration: 2m }
+      - setWeight: 50
+      - pause: { duration: 2m }
+      - setWeight: 80
+      - pause: { duration: 1m }
+    analysis:
+      enabled: true
+      prometheusAddress: http://kube-prometheus-stack-prometheus.monitoring.svc:9090
+      # Abort and roll back if the canary's non-5xx ratio drops below this.
+      successRate: 0.95
+      # Abort if canary p95 latency (seconds) exceeds this.
+      maxP95LatencySeconds: 0.5
+      interval: 1m
+      failureLimit: 1
+
+# ── Database ─────────────────────────────────────────────────────────────────
+database:
+  # internal: single-replica PostgreSQL StatefulSet (dev / demos)
+  # external: managed PostgreSQL such as Amazon RDS (production)
+  # none:     API uses its in-memory store (stateless demo)
+  mode: internal
+  name: devops
+  user: devops
+  # Password Secret. With existingSecret empty the chart creates one from `password`.
+  existingSecret: ""
+  passwordKey: password
+  password: ""
+  external:
+    host: ""
+    port: 5432
+    ssl: true
+    # CA bundle used to verify the server certificate. The API image ships the
+    # Amazon RDS global bundle; point caConfigMap at a ConfigMap to override.
+    caFile: /app/certs/rds-global-bundle.pem
+    caConfigMap: ""
+    caKey: global-bundle.pem
+  internal:
+    image:
+      repository: postgres
+      tag: 17-alpine
+    storage:
+      size: 2Gi
+      storageClassName: ""
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+
+# Pull secrets from AWS Secrets Manager / SSM via the External Secrets Operator.
+externalSecrets:
+  enabled: false
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: aws-secrets-manager
+  refreshInterval: 1h
+  # Secrets Manager key holding the RDS master credentials ({"username","password"})
+  databaseKey: ""
+  # Secrets Manager key holding the ingest token (plain string)
+  ingestTokenKey: ""
+
+# ── Networking ───────────────────────────────────────────────────────────────
 service:
   type: ClusterIP
   port: 80
-  targetPort: 80
 
+# Kubernetes Gateway API (the successor to Ingress; ingress-nginx was retired in 2026).
+# Routes "/" → web and "/api" → api on a shared Gateway owned by the platform team.
+gateway:
+  enabled: true
+  parentRefs:
+    - name: platform-gateway
+      namespace: envoy-gateway-system
+  hostnames:
+    - cloud-devops.localtest.me
+
+# Classic Ingress, for clusters without a Gateway API implementation.
 ingress:
-  enabled: true
-  className: nginx
-  host: cloud-devops.local
-  path: /
+  enabled: false
+  className: ""
+  host: cloud-devops.localtest.me
+  annotations: {}
+  tls:
+    enabled: false
+    secretName: ""
+    # cert-manager ClusterIssuer, e.g. letsencrypt-prod
+    clusterIssuer: ""
 
-autoscaling:
+# Default-deny NetworkPolicies with explicit allows (gateway → web/api,
+# api → postgres, Prometheus → api metrics, DNS egress).
+networkPolicy:
   enabled: true
-  minReplicas: 2
-  maxReplicas: 4
-  targetCPUUtilizationPercentage: 70
+  # Namespaces whose pods proxy external traffic (Envoy Gateway data plane / ingress controller)
+  ingressNamespaces:
+    - envoy-gateway-system
+  monitoringNamespace: monitoring
+  # Extra CIDRs the API may reach (e.g. RDS subnets); empty = any destination on 5432/443.
+  databaseEgressCIDRs: []
 
-podDisruptionBudget:
+topologySpread:
   enabled: true
-  minAvailable: 1
+  maxSkew: 1
 
-resources:
-  requests:
-    cpu: 100m
-    memory: 128Mi
-  limits:
-    cpu: 500m
-    memory: 256Mi
+# ── Observability (kube-prometheus-stack) ────────────────────────────────────
+monitoring:
+  podMonitor:
+    enabled: false
+    interval: 30s
+    labels:
+      release: kube-prometheus-stack
+  prometheusRule:
+    enabled: false
+    labels:
+      release: kube-prometheus-stack
+  grafanaDashboard:
+    enabled: false
+    # Grafana sidecar picks up ConfigMaps with this label
+    labels:
+      grafana_dashboard: "1"
+    folder: Cloud DevOps
+
+# `helm test` hooks
+tests:
+  image: curlimages/curl:8.15.0

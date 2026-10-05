@@ -1,0 +1,71 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Promote a version that is already running in dev to prod by opening a pull
+# request against gitops/environments/prod/values.yaml. The PR is the change
+# record; merging it is the release (Argo CD syncs, Argo Rollouts canaries).
+# Protect the "prod" environment with required reviewers for a manual gate.
+# ─────────────────────────────────────────────────────────────────────────────
+name: Promote to prod
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Image tag (commit SHA) to promote — empty = what dev runs now
+        type: string
+        required: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: prod
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Resolve tag
+        id: tag
+        run: |
+          tag="${{ inputs.tag }}"
+          [[ -z "$tag" ]] && tag=$(yq '.global.imageTag' gitops/environments/dev/values.yaml)
+          [[ "$tag" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::'$tag' is not an immutable commit SHA tag"; exit 1; }
+          current=$(yq '.global.imageTag' gitops/environments/prod/values.yaml)
+          [[ "$tag" != "$current" ]] || { echo "::notice::prod already runs $tag"; }
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+      - name: Verify the image signature before promoting
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - run: |
+          for c in api web; do
+            cosign verify "ghcr.io/${GITHUB_REPOSITORY,,}/$c:${{ steps.tag.outputs.tag }}" \
+              --certificate-identity-regexp "^https://github.com/${GITHUB_REPOSITORY}/.github/workflows/ci.yml@refs/heads/main$" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com >/dev/null
+            echo "✔ $c signature verified"
+          done
+      - name: Update prod values
+        run: yq -i '.global.imageTag = "${{ steps.tag.outputs.tag }}"' gitops/environments/prod/values.yaml
+      - name: Open promotion pull request
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          branch: promote/prod-${{ steps.tag.outputs.tag }}
+          commit-message: "release(prod): promote ${{ steps.tag.outputs.tag }}"
+          title: "release(prod): promote ${{ steps.tag.outputs.tag }}"
+          body: |
+            Promotes the version currently validated in **dev** to **prod**.
+
+            | | |
+            |---|---|
+            | From | `${{ steps.tag.outputs.current }}` |
+            | To | `${{ steps.tag.outputs.tag }}` |
+            | Changes | https://github.com/${{ github.repository }}/compare/${{ steps.tag.outputs.current }}...${{ steps.tag.outputs.tag }} |
+
+            ✔ cosign signatures verified for `api` and `web`.
+
+            On merge, Argo CD syncs prod and Argo Rollouts runs a canary
+            (20% → 50% → 80% → 100%) gated by Prometheus analysis, rolling back
+            automatically on regressions.
+          labels: release, prod
+          delete-branch: true

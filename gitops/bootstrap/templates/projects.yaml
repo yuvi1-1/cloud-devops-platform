@@ -1,0 +1,44 @@
+# Platform add-ons may install cluster-scoped resources; the application project
+# is fenced to its own namespaces and to this repository.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-10"
+spec:
+  description: Cluster add-ons managed by the platform team
+  sourceRepos: ["*"]
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: "*"
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: cloud-devops
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-10"
+spec:
+  description: Cloud DevOps Platform application environments
+  sourceRepos:
+    - {{ .Values.repo.url }}
+  destinations:
+    {{- range $env := .Values.environments }}
+    - server: https://kubernetes.default.svc
+      namespace: {{ $env.namespace }}
+    {{- end }}
+  # Applications may only create namespaced resources (plus their Namespace).
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  roles:
+    - name: ci
+      description: Read-only access for CI pipelines (sync status checks)
+      policies:
+        - p, proj:cloud-devops:ci, applications, get, cloud-devops/*, allow

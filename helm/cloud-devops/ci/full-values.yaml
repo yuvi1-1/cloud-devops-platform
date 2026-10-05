@@ -1,0 +1,32 @@
+# chart-testing / CI: every optional feature switched on
+environment: prod
+global:
+  imageTag: 0123456789abcdef0123456789abcdef01234567
+gateway:
+  hostnames: [cloud-devops.example.com]
+api:
+  image:
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  rollout:
+    enabled: true
+database:
+  mode: external
+  external:
+    host: cloud-devops.abc123.ap-south-1.rds.amazonaws.com
+    caConfigMap: rds-ca-bundle
+externalSecrets:
+  enabled: true
+  databaseKey: rds!db-0123456789
+  ingestTokenKey: cloud-devops/prod/ingest-token
+networkPolicy:
+  databaseEgressCIDRs: ["10.0.0.0/16"]
+monitoring:
+  podMonitor:
+    enabled: true
+  prometheusRule:
+    enabled: true
+  grafanaDashboard:
+    enabled: true
+serviceAccount:
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/cloud-devops-api

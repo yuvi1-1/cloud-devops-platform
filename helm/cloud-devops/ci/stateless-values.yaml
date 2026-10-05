@@ -1,0 +1,21 @@
+# chart-testing / CI: no database, autoscaling off
+database:
+  mode: none
+web:
+  autoscaling:
+    enabled: false
+api:
+  seedDemoData: true
+  autoscaling:
+    enabled: false
+gateway:
+  enabled: false
+ingress:
+  enabled: true
+  className: traefik
+  host: cloud-devops.example.com
+  tls:
+    enabled: true
+    clusterIssuer: letsencrypt-prod
+networkPolicy:
+  enabled: false

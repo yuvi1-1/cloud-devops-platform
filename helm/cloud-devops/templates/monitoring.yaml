@@ -1,0 +1,77 @@
+{{- $m := .Values.monitoring }}
+{{- if and .Values.api.enabled $m.podMonitor.enabled }}
+# PodMonitor (not ServiceMonitor) so that canary pods are scraped exactly once
+# while Argo Rollouts re-points Service selectors during a rollout.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{ include "cloud-devops.api.fullname" . }}
+  labels:
+    {{- include "cloud-devops.componentLabels" (dict "root" . "component" "api") | nindent 4 }}
+    {{- with $m.podMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "cloud-devops.selectorLabels" (dict "root" . "component" "api") | nindent 6 }}
+  # Exposed as the `rollouts_pod_template_hash` label → canary analysis queries.
+  podTargetLabels:
+    - rollouts-pod-template-hash
+  podMetricsEndpoints:
+    - port: http
+      path: /metrics
+      interval: {{ $m.podMonitor.interval }}
+      relabelings:
+        - targetLabel: app
+          replacement: cloud-devops-api
+{{- end }}
+{{- if $m.prometheusRule.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "cloud-devops.fullname" . }}
+  labels:
+    {{- include "cloud-devops.labels" . | nindent 4 }}
+    {{- with $m.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- /* Same rules as observability/prometheus/rules.yml (used by docker compose). */}}
+  {{- .Files.Get "files/alert-rules.yaml" | nindent 2 }}
+    - name: cloud-devops-kubernetes
+      rules:
+        - alert: CloudDevopsPodCrashLooping
+          expr: increase(kube_pod_container_status_restarts_total{namespace="{{ .Release.Namespace }}",pod=~"{{ include "cloud-devops.fullname" . }}-.*"}[15m]) > 3
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Pod {{ "{{" }} $labels.pod {{ "}}" }} is restarting frequently"
+        - alert: CloudDevopsHpaMaxedOut
+          expr: |
+            kube_horizontalpodautoscaler_status_current_replicas{namespace="{{ .Release.Namespace }}"}
+              >= kube_horizontalpodautoscaler_spec_max_replicas{namespace="{{ .Release.Namespace }}"}
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "HPA {{ "{{" }} $labels.horizontalpodautoscaler {{ "}}" }} has been at max replicas for 15m"
+{{- end }}
+{{- if $m.grafanaDashboard.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cloud-devops.fullname" . }}-dashboards
+  labels:
+    {{- include "cloud-devops.labels" . | nindent 4 }}
+    {{- with $m.grafanaDashboard.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  annotations:
+    grafana_folder: {{ $m.grafanaDashboard.folder | quote }}
+data:
+  {{- (.Files.Glob "dashboards/*.json").AsConfig | nindent 2 }}
+{{- end }}

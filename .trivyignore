@@ -1,0 +1,7 @@
+# Trivy suppressions — every entry needs a justification and an expiry review.
+# Format: <ID>  # reason (reviewed YYYY-MM-DD)
+
+# OpenSSL heap overflow that only affects 32-bit builds; every image here is
+# built for linux/amd64 and linux/arm64 (64-bit). Remove once base images ship
+# OpenSSL 3.0.19 / 3.5.6. (reviewed 2026-10-06)
+CVE-2026-31789

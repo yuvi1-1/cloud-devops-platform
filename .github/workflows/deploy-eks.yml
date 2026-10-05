@@ -1,0 +1,65 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Break-glass: deploy straight to EKS with Helm, bypassing Argo CD (e.g. when
+# Argo CD itself is down). Normal releases go through GitOps — Argo CD will
+# re-sync the Git state afterwards unless auto-sync is paused.
+# Kept from v1 of the project: GitHub OIDC → IAM role → EKS access entry.
+# ─────────────────────────────────────────────────────────────────────────────
+name: Break-glass Helm deploy (EKS)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        options: [dev, prod]
+        default: dev
+      tag:
+        description: Image tag (commit SHA)
+        type: string
+        required: true
+      dry_run:
+        description: Render and diff only
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'ap-south-1' }}
+  EKS_CLUSTER: ${{ vars.EKS_CLUSTER || 'cloud-devops-cluster' }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v3.22.0
+      - name: Verify identity & cluster
+        run: |
+          aws sts get-caller-identity
+          aws eks describe-cluster --name "$EKS_CLUSTER" --query cluster.status --output text
+          aws eks update-kubeconfig --name "$EKS_CLUSTER" --region "$AWS_REGION"
+      - name: Helm ${{ inputs.dry_run && 'diff (dry run)' || 'upgrade' }}
+        env:
+          NS: cloud-devops-${{ inputs.environment }}
+          TAG: ${{ inputs.tag }}
+          DRY: ${{ inputs.dry_run }}
+        run: |
+          args=(upgrade --install cloud-devops helm/cloud-devops -n "$NS"
+            -f "gitops/environments/${{ inputs.environment }}/values.yaml"
+            --set environment=${{ inputs.environment }}
+            --set global.imageTag="$TAG" --reuse-values --atomic --timeout 10m)
+          if [[ "$DRY" == "true" ]]; then helm "${args[@]}" --dry-run=server | tail -n 40; exit 0; fi
+          helm "${args[@]}"
+          kubectl -n "$NS" get deploy,rollout,pods -o wide

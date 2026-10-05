@@ -1,0 +1,38 @@
+{{- range $name, $a := .Values.addons }}
+{{- if and $a.enabled (has $.Values.cluster.provider $a.providers) }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ $name }}
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ $a.syncWave | quote }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  sources:
+    - repoURL: {{ $a.repoURL }}
+      chart: {{ $a.chart }}
+      targetRevision: {{ $a.version }}
+      helm:
+        releaseName: {{ $name }}
+        valueFiles:
+          - $values/gitops/platform/values/{{ $name }}.yaml
+          - $values/gitops/platform/values/{{ $name }}.{{ $.Values.cluster.provider }}.yaml
+        ignoreMissingValueFiles: true
+        {{- with $a.values }}
+        valuesObject:
+          {{- tpl (toYaml .) $ | nindent 10 }}
+        {{- end }}
+    - repoURL: {{ $.Values.repo.url }}
+      targetRevision: {{ $.Values.repo.targetRevision }}
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ $a.namespace }}
+  syncPolicy:
+    {{- include "bootstrap.syncPolicy" $ | nindent 4 }}
+{{- end }}
+{{- end }}

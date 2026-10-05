@@ -1,0 +1,11 @@
+# Provisions the AWS Network Load Balancer for the Envoy Gateway data plane.
+# IAM permissions come from EKS Pod Identity (Terraform: aws_lb_controller_pod_identity).
+replicaCount: 2
+serviceAccount:
+  create: true
+  name: aws-load-balancer-controller
+# Only handle Services that explicitly ask for it (the Envoy proxy Service).
+enableServiceMutatorWebhook: false
+resources:
+  requests: { cpu: 50m, memory: 64Mi }
+  limits: { memory: 256Mi }

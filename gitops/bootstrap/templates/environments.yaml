@@ -1,0 +1,78 @@
+{{- range $envName, $env := .Values.environments }}
+{{- if $env.enabled }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cloud-devops-{{ $envName }}
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: cloud-devops
+  source:
+    repoURL: {{ $.Values.repo.url }}
+    targetRevision: {{ $.Values.repo.targetRevision }}
+    path: helm/cloud-devops
+    helm:
+      releaseName: cloud-devops
+      valueFiles:
+        # Image tag is bumped here by CI (dev) and by the promotion PR (prod).
+        - ../../gitops/environments/{{ $envName }}/values.yaml
+      valuesObject:
+        environment: {{ $envName }}
+        gateway:
+          hostnames:
+            - {{ eq $envName "prod" | ternary $.Values.gateway.prodHostname $.Values.gateway.devHostname }}
+        {{- if eq $.Values.cluster.provider "eks" }}
+        # Credentials come from AWS Secrets Manager via the External Secrets Operator.
+        externalSecrets:
+          enabled: true
+          ingestTokenKey: {{ $.Values.secrets.ingestTokenKey | quote }}
+          databaseKey: {{ index $.Values.secrets.databaseKeys $envName | quote }}
+        {{- else }}
+        # Local kind cluster: throwaway credentials, never used outside a laptop.
+        api:
+          ingestToken:
+            value: local-dev-ingest-token-{{ $envName }}
+        {{- end }}
+        {{- if and (eq $envName "prod") $.Values.database.prodHost }}
+        database:
+          mode: external
+          external:
+            host: {{ $.Values.database.prodHost }}
+            ssl: true
+        {{- else if ne $.Values.cluster.provider "eks" }}
+        database:
+          password: local-dev-only-password
+        {{- end }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ $env.namespace }}
+  # Argo Rollouts and its Gateway API plugin mutate these fields at runtime.
+  ignoreDifferences:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      jqPathExpressions:
+        - .spec.rules[].backendRefs[].weight
+  syncPolicy:
+    {{- if $env.autoSync }}
+    automated:
+      prune: true
+      selfHeal: true
+    {{- end }}
+    managedNamespaceMetadata:
+      labels:
+        # Allows HTTPRoutes in this namespace to attach to the shared Gateway.
+        cloud-devops.io/gateway-access: "true"
+        # Pod Security Admission: reject privileged pods outright.
+        pod-security.kubernetes.io/enforce: restricted
+        pod-security.kubernetes.io/enforce-version: latest
+    syncOptions:
+      - CreateNamespace=true
+      - RespectIgnoreDifferences=true
+      - ApplyOutOfSyncOnly=true
+{{- end }}
+{{- end }}

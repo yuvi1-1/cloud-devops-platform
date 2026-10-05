@@ -1,24 +1,44 @@
-{{- if .Values.autoscaling.enabled }}
+{{- range $component := list "web" "api" }}
+{{- $v := index $.Values $component }}
+{{- if and $v.enabled $v.autoscaling.enabled }}
+{{- $c := dict "root" $ "component" $component }}
+---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
-
 metadata:
-  name: {{ .Release.Name }}-hpa
-
+  name: {{ include "cloud-devops.fullname" $ | trunc 59 }}-{{ $component }}
+  labels:
+    {{- include "cloud-devops.componentLabels" $c | nindent 4 }}
 spec:
   scaleTargetRef:
+    {{- if and (eq $component "api") $v.rollout.enabled }}
+    apiVersion: argoproj.io/v1alpha1
+    kind: Rollout
+    {{- else }}
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ .Release.Name }}-app
-
-  minReplicas: {{ .Values.autoscaling.minReplicas }}
-  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
-
+    {{- end }}
+    name: {{ include "cloud-devops.fullname" $ | trunc 59 }}-{{ $component }}
+  minReplicas: {{ $v.autoscaling.minReplicas }}
+  maxReplicas: {{ $v.autoscaling.maxReplicas }}
   metrics:
     - type: Resource
       resource:
         name: cpu
         target:
           type: Utilization
-          averageUtilization: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
+          averageUtilization: {{ $v.autoscaling.targetCPUUtilizationPercentage }}
+    {{- with $v.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ . }}
+    {{- end }}
+  {{- with $v.autoscaling.behavior }}
+  behavior:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
 {{- end }}
