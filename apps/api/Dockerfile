@@ -5,7 +5,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Stage 1 — compile TypeScript
-FROM node:22-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /repo
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/
@@ -16,7 +16,7 @@ RUN npm run build --workspace apps/api
 
 
 # Stage 2 — production dependencies only
-FROM node:22-alpine AS deps
+FROM node:26-alpine AS deps
 WORKDIR /repo
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/
