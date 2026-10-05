@@ -4,11 +4,11 @@
 
 | | |
 |---|---|
-| Submitted by | *[Your Name]* (*[Roll / Registration No.]*) |
-| Guide | *[Guide Name], [Designation]* |
-| Department | *[Department of Computer Science & Engineering]* |
-| Institution | *[College / University]* |
-| Academic year | 2026–27 |
+| Submitted by | Yuvraj Pegu (231210129) |
+| Guide | Dr Gunjan, Depsrtment of CSE |
+| Department | Department of Computer Science & Engineering |
+| Institution | NIT Delhi |
+| Academic year | 2023–27 |
 | Repository | https://github.com/yuvi1-1/cloud-devops-platform |
 
 > Fields in *[brackets]* are placeholders for your institution's format. Sections marked **📋 Record after deployment** contain tables to fill with measurements from your own AWS run — do not invent values.
