@@ -1,0 +1,31 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# PROD environment — changed only through a reviewed promotion pull request
+# (.github/workflows/promote.yml) that copies a tag already proven in dev.
+# ─────────────────────────────────────────────────────────────────────────────
+global:
+  imageTag: main
+
+api:
+  logLevel: info
+  seedDemoData: false
+  enableLoadEndpoint: false
+  # Canary: 20% → 50% → 80% → 100%, gated by Prometheus analysis; automatic
+  # rollback when the success rate or p95 latency regresses.
+  rollout:
+    enabled: true
+  autoscaling:
+    minReplicas: 2
+    maxReplicas: 10
+
+web:
+  autoscaling:
+    minReplicas: 2
+    maxReplicas: 6
+
+monitoring:
+  podMonitor:
+    enabled: true
+  prometheusRule:
+    enabled: true
+  grafanaDashboard:
+    enabled: false # one copy of the dashboard is enough (installed by dev)

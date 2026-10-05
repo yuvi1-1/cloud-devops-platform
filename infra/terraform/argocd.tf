@@ -79,10 +79,15 @@ resource "helm_release" "gitops_bootstrap" {
               }
               secrets = {
                 ingestTokenKey = aws_secretsmanager_secret.ingest_token.name
-                databaseKey    = var.create_rds ? aws_db_instance.this[0].master_user_secret[0].secret_arn : ""
+                databaseKeys   = local.database_secret_keys
               }
               database = {
                 prodHost = var.create_rds ? aws_db_instance.this[0].address : ""
+              }
+              gateway = {
+                devHostname      = var.dev_hostname
+                prodHostname     = var.prod_hostname
+                letsEncryptEmail = var.letsencrypt_email
               }
             }
           }

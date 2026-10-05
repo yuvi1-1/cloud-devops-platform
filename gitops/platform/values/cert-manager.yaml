@@ -1,0 +1,15 @@
+crds:
+  enabled: true
+  keep: true
+config:
+  apiVersion: controller.config.cert-manager.io/v1alpha1
+  kind: ControllerConfiguration
+  # Issue certificates for Gateway API listeners (annotation on the Gateway).
+  gatewayAPI:
+    enabled: true
+prometheus:
+  enabled: true
+  servicemonitor:
+    enabled: true
+resources:
+  requests: { cpu: 10m, memory: 64Mi }

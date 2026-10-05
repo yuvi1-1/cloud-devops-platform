@@ -1,0 +1,178 @@
+{{- $action := .Values.policies.validationFailureAction }}
+{{- $ns := .Values.appNamespaces }}
+{{- define "platform.match" -}}
+match:
+  any:
+    - resources:
+        kinds: [Pod]
+        namespaces:
+          {{- toYaml . | nindent 10 }}
+{{- end }}
+# Kyverno policy-as-code guardrails for the application namespaces. Rules on
+# Pods are auto-generated for Deployments, StatefulSets, Jobs and Rollouts.
+# Start in Audit (PolicyReports only); switch policies.validationFailureAction
+# to Enforce once reports are clean.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-hardened-containers
+  annotations:
+    policies.kyverno.io/title: Require hardened containers
+    policies.kyverno.io/category: Pod Security
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/description: >-
+      Containers must run as non-root with a read-only root filesystem, no
+      privilege escalation and all Linux capabilities dropped.
+spec:
+  background: true
+  rules:
+    - name: non-root-read-only
+      {{- include "platform.match" $ns | nindent 6 }}
+      validate:
+        failureAction: {{ $action }}
+        message: "Containers must set runAsNonRoot, readOnlyRootFilesystem, allowPrivilegeEscalation=false and drop ALL capabilities."
+        pattern:
+          spec:
+            =(securityContext):
+              =(runAsNonRoot): true
+            =(initContainers):
+              - securityContext:
+                  readOnlyRootFilesystem: true
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop: ["ALL"]
+            containers:
+              - securityContext:
+                  readOnlyRootFilesystem: true
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop: ["ALL"]
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-requests-limits
+  annotations:
+    policies.kyverno.io/title: Require resource requests and memory limits
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/severity: medium
+spec:
+  background: true
+  rules:
+    - name: requests-and-memory-limit
+      {{- include "platform.match" $ns | nindent 6 }}
+      validate:
+        failureAction: {{ $action }}
+        message: "CPU/memory requests and a memory limit are required (the HPA and scheduler depend on them)."
+        pattern:
+          spec:
+            containers:
+              - resources:
+                  requests:
+                    cpu: "?*"
+                    memory: "?*"
+                  limits:
+                    memory: "?*"
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-probes
+  annotations:
+    policies.kyverno.io/title: Require readiness and liveness probes
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/severity: medium
+spec:
+  background: true
+  rules:
+    - name: readiness-and-liveness
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces:
+                {{- toYaml $ns | nindent 16 }}
+      exclude:
+        any:
+          - resources:
+              selector:
+                matchLabels:
+                  app.kubernetes.io/component: test
+      validate:
+        failureAction: {{ $action }}
+        message: "Long-running containers need readiness and liveness probes."
+        pattern:
+          spec:
+            containers:
+              - readinessProbe: {}
+                livenessProbe: {}
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: restrict-images
+  annotations:
+    policies.kyverno.io/title: Restrict image registries and mutable tags
+    policies.kyverno.io/category: Supply Chain
+    policies.kyverno.io/severity: high
+spec:
+  background: true
+  rules:
+    - name: allowed-registries
+      {{- include "platform.match" $ns | nindent 6 }}
+      validate:
+        failureAction: {{ $action }}
+        message: "Images must come from an approved registry: {{ join ", " .Values.policies.allowedRegistries }}"
+        foreach:
+          - list: "request.object.spec.[containers, initContainers][]"
+            deny:
+              conditions:
+                all:
+                  - key: "{{ "{{" }} element.image {{ "}}" }}"
+                    operator: AnyNotIn
+                    value:
+                      {{- toYaml .Values.policies.allowedRegistries | nindent 22 }}
+    - name: disallow-latest-tag
+      {{- include "platform.match" $ns | nindent 6 }}
+      validate:
+        failureAction: {{ $action }}
+        message: "Mutable ':latest' tags are not allowed — deploy an immutable tag or digest."
+        foreach:
+          - list: "request.object.spec.[containers, initContainers][]"
+            deny:
+              conditions:
+                any:
+                  - key: "{{ "{{" }} element.image {{ "}}" }}"
+                    operator: Equals
+                    value: "*:latest"
+---
+# Supply-chain integrity: only images signed by this repository's GitHub
+# Actions workflows (Sigstore keyless / Fulcio + Rekor) may run.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-image-signatures
+  annotations:
+    policies.kyverno.io/title: Verify cosign keyless signatures
+    policies.kyverno.io/category: Supply Chain
+    policies.kyverno.io/severity: high
+spec:
+  webhookTimeoutSeconds: 30
+  background: false
+  rules:
+    - name: verify-ghcr-signatures
+      {{- include "platform.match" $ns | nindent 6 }}
+      verifyImages:
+        - imageReferences:
+            {{- toYaml .Values.policies.signedImages | nindent 12 }}
+          failureAction: {{ $action }}
+          # Rewrite tags to the verified digest so what was checked is what runs.
+          mutateDigest: true
+          verifyDigest: true
+          attestors:
+            - entries:
+                - keyless:
+                    subject: {{ .Values.policies.signatureSubject | quote }}
+                    issuer: https://token.actions.githubusercontent.com
+                    rekor:
+                      url: https://rekor.sigstore.dev

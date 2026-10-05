@@ -1,0 +1,19 @@
+# Policy engine; the policies themselves live in gitops/platform/config.
+admissionController:
+  replicas: 1
+  container:
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits: { memory: 384Mi }
+backgroundController:
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+cleanupController:
+  enabled: false
+reportsController:
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+features:
+  policyExceptions:
+    enabled: true
+    namespace: kyverno

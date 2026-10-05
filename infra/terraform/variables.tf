@@ -170,6 +170,24 @@ variable "gitops_revision" {
   default     = "main"
 }
 
+variable "dev_hostname" {
+  description = "Public hostname for the dev environment (CNAME it to the NLB)."
+  type        = string
+  default     = "dev.cloud-devops.example.com"
+}
+
+variable "prod_hostname" {
+  description = "Public hostname for the prod environment (CNAME it to the NLB)."
+  type        = string
+  default     = "cloud-devops.example.com"
+}
+
+variable "letsencrypt_email" {
+  description = "Enables HTTPS via cert-manager + Let's Encrypt when set (needs real DNS)."
+  type        = string
+  default     = ""
+}
+
 variable "tags" {
   description = "Extra tags applied to every resource."
   type        = map(string)

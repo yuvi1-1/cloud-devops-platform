@@ -42,6 +42,9 @@ ENV NODE_ENV=production \
     GIT_COMMIT=${GIT_COMMIT} \
     PORT=3000
 
+# Amazon RDS CA bundle so TLS to RDS is verified (DATABASE_SSL_CA_FILE).
+ADD --chmod=0444 https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /app/certs/rds-global-bundle.pem
+
 COPY --from=deps /repo/node_modules ./node_modules
 COPY --from=build /repo/apps/api/package.json ./package.json
 COPY --from=build /repo/apps/api/dist ./dist

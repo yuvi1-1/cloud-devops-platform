@@ -157,7 +157,9 @@ database:
     host: ""
     port: 5432
     ssl: true
-    # ConfigMap holding the CA bundle (e.g. Amazon RDS global-bundle.pem)
+    # CA bundle used to verify the server certificate. The API image ships the
+    # Amazon RDS global bundle; point caConfigMap at a ConfigMap to override.
+    caFile: /app/certs/rds-global-bundle.pem
     caConfigMap: ""
     caKey: global-bundle.pem
   internal:

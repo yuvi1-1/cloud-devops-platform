@@ -1,0 +1,148 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Root "app of apps". Terraform (EKS) or scripts/kind-up.sh (local) install
+# this chart once through Argo CD; afterwards everything is driven from Git.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Cluster facts injected by Terraform (GitOps bridge). provider: eks | kind
+cluster:
+  provider: eks
+  name: cloud-devops-cluster
+  region: ap-south-1
+  vpcId: ""
+
+repo:
+  url: https://github.com/yuvi1-1/cloud-devops-platform.git
+  targetRevision: main
+
+# Secrets Manager keys (EKS only) consumed through External Secrets.
+secrets:
+  ingestTokenKey: ""
+  # Per-environment database password secret ({"password": "..."} JSON)
+  databaseKeys:
+    dev: ""
+    prod: ""
+
+database:
+  # RDS endpoint for prod. Empty → prod uses the in-cluster PostgreSQL.
+  prodHost: ""
+
+# Public hostnames served by the shared Gateway, and Let's Encrypt contact.
+gateway:
+  devHostname: dev.cloud-devops.localtest.me
+  prodHostname: cloud-devops.localtest.me
+  # Set to enable HTTPS with Let's Encrypt (requires real DNS pointing at the NLB).
+  letsEncryptEmail: ""
+
+policies:
+  # Audit (report only) or Enforce (block non-compliant workloads)
+  validationFailureAction: Audit
+
+# Which application environments to deploy.
+environments:
+  dev:
+    enabled: true
+    namespace: cloud-devops-dev
+    autoSync: true
+  prod:
+    enabled: true
+    namespace: cloud-devops-prod
+    autoSync: true
+
+# ── Platform add-ons ─────────────────────────────────────────────────────────
+# Each becomes an Argo CD Application (multi-source: upstream chart + values
+# file from this repo). Lower syncWave = installed first.
+addons:
+  aws-load-balancer-controller:
+    enabled: true
+    providers: [eks]
+    namespace: kube-system
+    repoURL: https://aws.github.io/eks-charts
+    chart: aws-load-balancer-controller
+    version: 3.5.0
+    syncWave: -4
+    values:
+      clusterName: "{{ .Values.cluster.name }}"
+      region: "{{ .Values.cluster.region }}"
+      vpcId: "{{ .Values.cluster.vpcId }}"
+
+  envoy-gateway:
+    enabled: true
+    providers: [eks, kind]
+    namespace: envoy-gateway-system
+    repoURL: docker.io/envoyproxy
+    chart: gateway-helm
+    version: v1.9.2
+    syncWave: -3
+
+  metrics-server:
+    enabled: true
+    # EKS ships metrics-server as a managed add-on (Terraform).
+    providers: [kind]
+    namespace: kube-system
+    repoURL: https://kubernetes-sigs.github.io/metrics-server
+    chart: metrics-server
+    version: 3.14.0
+    syncWave: -3
+
+  cert-manager:
+    enabled: true
+    providers: [eks, kind]
+    namespace: cert-manager
+    repoURL: https://charts.jetstack.io
+    chart: cert-manager
+    version: v1.21.2
+    syncWave: -2
+
+  external-secrets:
+    enabled: true
+    providers: [eks]
+    namespace: external-secrets
+    repoURL: https://charts.external-secrets.io
+    chart: external-secrets
+    version: 2.11.0
+    syncWave: -2
+
+  argo-rollouts:
+    enabled: true
+    providers: [eks, kind]
+    namespace: argo-rollouts
+    repoURL: https://argoproj.github.io/argo-helm
+    chart: argo-rollouts
+    version: 2.43.5
+    syncWave: -2
+
+  kyverno:
+    enabled: true
+    providers: [eks, kind]
+    namespace: kyverno
+    repoURL: https://kyverno.github.io/kyverno
+    chart: kyverno
+    version: 3.9.1
+    syncWave: -2
+
+  kube-prometheus-stack:
+    enabled: true
+    providers: [eks, kind]
+    namespace: monitoring
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    version: 91.9.0
+    syncWave: -2
+
+  loki:
+    enabled: true
+    providers: [eks, kind]
+    namespace: monitoring
+    repoURL: https://grafana.github.io/helm-charts
+    chart: loki
+    version: 7.3.0
+    syncWave: -1
+
+  alloy:
+    enabled: true
+    providers: [eks, kind]
+    namespace: monitoring
+    repoURL: https://grafana.github.io/helm-charts
+    chart: alloy
+    version: 1.13.0
+    syncWave: -1
