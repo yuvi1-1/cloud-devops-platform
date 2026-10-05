@@ -62,6 +62,18 @@ kubectl -n kube-system get ds aws-node # VPC CNI DaemonSet not healthy
 
 **Fix.** The chart never generates secrets. Passwords come from AWS Secrets Manager through External Secrets (EKS) or are explicit local-only values (kind/compose).
 
+## Incident 8 — first CI run on the pull request (v2)
+
+The first real pipeline run surfaced three problems that local checks could not:
+
+| Job | Symptom | Root cause | Fix |
+|---|---|---|---|
+| Images | Trivy gate failed: `CVE-2026-42945` (nginx, arbitrary code execution) and `CVE-2026-31789` (OpenSSL) | Base images (`nginx-unprivileged:1.28-alpine`, `distroless nodejs22-debian12`) predated the fixes | Moved to `nginx-unprivileged:1.30-alpine` + `apk upgrade` at build time, and `distroless nodejs22-debian13`; the OpenSSL CVE only affects 32-bit builds, so it is documented in `.trivyignore` with a review date |
+| Terraform | `terraform test`: *Condition expression could not be evaluated at this time* | HashiCorp Terraform treats the IAM policy JSON as unknown during `plan` (it embeds a computed ARN); OpenTofu, used locally, resolved it | Assert on the input (`local.github_oidc_subjects`) instead of the rendered JSON |
+| E2E | `helm test --logs`: *pod not found* although the test passed | `hook-delete-policy: hook-succeeded` deleted the pod before Helm fetched its logs | Keep test pods until the next run (`before-hook-creation` only) |
+
+Lesson: the security gate did its job — a release with a known remote-code-execution bug in NGINX was blocked automatically.
+
 ---
 
 ## Quick diagnostic commands
