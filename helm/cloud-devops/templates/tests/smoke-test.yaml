@@ -8,7 +8,8 @@ metadata:
     cloud-devops.io/client: "true"
   annotations:
     helm.sh/hook: test
-    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    # Keep the pod after success so `helm test --logs` can read its output.
+    helm.sh/hook-delete-policy: before-hook-creation
 spec:
   restartPolicy: Never
   automountServiceAccountToken: false

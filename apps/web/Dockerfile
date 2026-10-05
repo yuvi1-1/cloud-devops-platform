@@ -23,7 +23,7 @@ RUN npm run build --workspace apps/web
 
 
 # Stage 2 — serve with unprivileged NGINX (runs as UID 101 on port 8080)
-FROM nginxinc/nginx-unprivileged:1.28-alpine AS runtime
+FROM nginxinc/nginx-unprivileged:1.30-alpine AS runtime
 
 ARG APP_VERSION=dev
 ARG GIT_COMMIT=local
@@ -33,6 +33,12 @@ LABEL org.opencontainers.image.title="cloud-devops-web" \
       org.opencontainers.image.version="${APP_VERSION}" \
       org.opencontainers.image.revision="${GIT_COMMIT}" \
       org.opencontainers.image.licenses="MIT"
+
+# Pull in Alpine security fixes published after the base image was built.
+USER root
+# hadolint ignore=DL3017
+RUN apk upgrade --no-cache
+USER 101
 
 COPY --chown=101:101 apps/web/nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY --from=build --chown=101:101 /repo/apps/web/dist /usr/share/nginx/html

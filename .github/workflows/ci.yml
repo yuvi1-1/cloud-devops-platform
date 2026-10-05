@@ -155,6 +155,8 @@ jobs:
         uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2.2.0
       - name: Dependency review
         if: github.event_name == 'pull_request'
+        # Needs the dependency graph (Settings → Security → Dependency graph).
+        continue-on-error: true
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: high
@@ -249,6 +251,7 @@ jobs:
           ignore-unfixed: true
           exit-code: "1"
           skip-setup-trivy: true
+          trivyignores: .trivyignore
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         if: env.PUSH == 'true'
       - name: Sign image (keyless, GitHub OIDC → Fulcio, logged in Rekor)

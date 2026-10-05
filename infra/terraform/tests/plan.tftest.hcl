@@ -111,7 +111,8 @@ run "default_plan" {
   }
 
   assert {
-    condition     = strcontains(aws_iam_role.github_actions.assume_role_policy, "repo:yuvi1-1/cloud-devops-platform:ref:refs/heads/main") && !strcontains(aws_iam_role.github_actions.assume_role_policy, "repo:yuvi1-1/cloud-devops-platform:*")
+    # (the rendered policy JSON is unknown at plan time because it embeds the provider ARN)
+    condition     = contains(local.github_oidc_subjects, "repo:yuvi1-1/cloud-devops-platform:ref:refs/heads/main") && alltrue([for s in local.github_oidc_subjects : !endswith(s, ":*")])
     error_message = "OIDC trust must be restricted to this repository"
   }
 

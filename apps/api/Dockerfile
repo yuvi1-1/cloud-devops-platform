@@ -25,7 +25,7 @@ RUN --mount=type=cache,target=/root/.npm npm ci --workspace apps/api --omit=dev 
 
 
 # Stage 3 — distroless runtime: no shell, no package manager, non-root (UID 65532)
-FROM gcr.io/distroless/nodejs22-debian12:nonroot AS runtime
+FROM gcr.io/distroless/nodejs22-debian13:nonroot AS runtime
 
 ARG APP_VERSION=dev
 ARG GIT_COMMIT=unknown
