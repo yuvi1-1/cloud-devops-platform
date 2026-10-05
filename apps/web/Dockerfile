@@ -1,22 +1,44 @@
-# Stage 1: Build the React application
-FROM node:22-alpine AS builder
+# syntax=docker/dockerfile:1.7
+# ─────────────────────────────────────────────────────────────────────────────
+# Web dashboard image — build context is the repository root:
+#   docker build -f apps/web/Dockerfile -t cloud-devops-web .
+# ─────────────────────────────────────────────────────────────────────────────
 
-WORKDIR /app
+# Stage 1 — build the static bundle with Vite
+FROM node:22-alpine AS build
+WORKDIR /repo
 
-COPY package*.json ./
+COPY package.json package-lock.json ./
+COPY apps/web/package.json apps/web/
+COPY apps/api/package.json apps/api/
+RUN --mount=type=cache,target=/root/.npm npm ci --workspace apps/web --no-audit --no-fund
 
-RUN npm ci
+COPY apps/web apps/web
 
-COPY . .
+ARG APP_VERSION=dev
+ARG GIT_COMMIT=local
+ENV VITE_APP_VERSION=${APP_VERSION} \
+    VITE_GIT_COMMIT=${GIT_COMMIT}
+RUN npm run build --workspace apps/web
 
-RUN npm run build
 
+# Stage 2 — serve with unprivileged NGINX (runs as UID 101 on port 8080)
+FROM nginxinc/nginx-unprivileged:1.28-alpine AS runtime
 
-# Stage 2: Serve the application with NGINX
-FROM nginx:alpine
+ARG APP_VERSION=dev
+ARG GIT_COMMIT=local
+LABEL org.opencontainers.image.title="cloud-devops-web" \
+      org.opencontainers.image.description="Cloud DevOps Platform — DORA metrics dashboard" \
+      org.opencontainers.image.source="https://github.com/yuvi1-1/cloud-devops-platform" \
+      org.opencontainers.image.version="${APP_VERSION}" \
+      org.opencontainers.image.revision="${GIT_COMMIT}" \
+      org.opencontainers.image.licenses="MIT"
 
-COPY --from=builder /app/dist /usr/share/nginx/html
+COPY --chown=101:101 apps/web/nginx/default.conf /etc/nginx/conf.d/default.conf
+COPY --from=build --chown=101:101 /repo/apps/web/dist /usr/share/nginx/html
 
-EXPOSE 80
+USER 101
+EXPOSE 8080
 
-CMD ["nginx", "-g", "daemon off;"]
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget -q -O /dev/null http://127.0.0.1:8080/healthz || exit 1
