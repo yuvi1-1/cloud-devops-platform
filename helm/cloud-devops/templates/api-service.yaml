@@ -1,0 +1,45 @@
+{{- if .Values.api.enabled }}
+{{- $c := dict "root" . "component" "api" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cloud-devops.api.fullname" . }}
+  labels:
+    {{- include "cloud-devops.componentLabels" $c | nindent 4 }}
+  {{- if .Values.api.rollout.enabled }}
+  annotations:
+    # Pods belong to an Argo Rollout, which kube-linter cannot resolve.
+    ignore-check.kube-linter.io/dangling-service: "selects pods of an Argo Rollout"
+  {{- end }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "cloud-devops.selectorLabels" $c | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+{{- if .Values.api.rollout.enabled }}
+---
+# Argo Rollouts narrows this Service's selector to the canary ReplicaSet during a rollout.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cloud-devops.api.fullname" . }}-canary
+  labels:
+    {{- include "cloud-devops.componentLabels" $c | nindent 4 }}
+    cloud-devops.io/role: canary
+  annotations:
+    ignore-check.kube-linter.io/dangling-service: "selects pods of an Argo Rollout"
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "cloud-devops.selectorLabels" $c | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+{{- end }}
+{{- end }}

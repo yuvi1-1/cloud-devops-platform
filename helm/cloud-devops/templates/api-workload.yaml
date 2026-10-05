@@ -1,0 +1,163 @@
+{{- if .Values.api.enabled }}
+{{- $c := dict "root" . "component" "api" }}
+{{- $image := include "cloud-devops.image" (dict "root" . "image" .Values.api.image) }}
+{{- $useRollout := .Values.api.rollout.enabled }}
+{{- if $useRollout }}
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+{{- else }}
+apiVersion: apps/v1
+kind: Deployment
+{{- end }}
+metadata:
+  name: {{ include "cloud-devops.api.fullname" . }}
+  labels:
+    {{- include "cloud-devops.componentLabels" $c | nindent 4 }}
+spec:
+  {{- if not .Values.api.autoscaling.enabled }}
+  replicas: {{ .Values.api.replicaCount }}
+  {{- end }}
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      {{- include "cloud-devops.selectorLabels" $c | nindent 6 }}
+  {{- if $useRollout }}
+  strategy:
+    canary:
+      stableService: {{ include "cloud-devops.api.fullname" . }}
+      canaryService: {{ include "cloud-devops.api.fullname" . }}-canary
+      maxUnavailable: 0
+      maxSurge: 1
+      {{- if .Values.gateway.enabled }}
+      # Precise traffic split on the HTTPRoute (Argo Rollouts Gateway API plugin).
+      trafficRouting:
+        plugins:
+          argoproj-labs/gatewayAPI:
+            httpRoute: {{ include "cloud-devops.api.fullname" . }}
+            namespace: {{ .Release.Namespace }}
+      {{- end }}
+      {{- if .Values.api.rollout.analysis.enabled }}
+      # Background analysis runs for the whole rollout; a failure aborts and
+      # shifts 100% of traffic back to the stable ReplicaSet automatically.
+      analysis:
+        startingStep: 1
+        templates:
+          - templateName: {{ include "cloud-devops.api.fullname" . }}-canary-health
+        args:
+          - name: canary-hash
+            valueFrom:
+              podTemplateHashValue: Latest
+      {{- end }}
+      steps:
+        {{- toYaml .Values.api.rollout.steps | nindent 8 }}
+  {{- else }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "cloud-devops.selectorLabels" $c | nindent 8 }}
+      annotations:
+        # Roll pods when config that is not part of the pod spec changes.
+        checksum/secret: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
+        {{- with .Values.api.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "cloud-devops.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        runAsUser: {{ .Values.api.runAsUser }}
+        runAsGroup: {{ .Values.api.runAsUser }}
+        fsGroup: {{ .Values.api.runAsUser }}
+      # > SHUTDOWN_DELAY_MS so in-flight requests finish after readiness flips to 503.
+      terminationGracePeriodSeconds: 30
+      {{- include "cloud-devops.topologySpread" $c | nindent 6 }}
+      {{- if and .Values.api.migrations.enabled (ne .Values.database.mode "none") }}
+      initContainers:
+        - name: migrate
+          image: {{ $image | quote }}
+          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+          args: ["dist/migrate.js"]
+          env:
+            {{- include "cloud-devops.api.env" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          {{- if and (eq .Values.database.mode "external") .Values.database.external.caConfigMap }}
+          volumeMounts:
+            - name: db-ca
+              mountPath: /etc/ssl/database
+              readOnly: true
+          {{- end }}
+      {{- end }}
+      containers:
+        - name: api
+          image: {{ $image | quote }}
+          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.api.containerPort }}
+              protocol: TCP
+          env:
+            {{- include "cloud-devops.api.env" . | nindent 12 }}
+          startupProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 2
+            failureThreshold: 30
+          readinessProbe:
+            # Checks the database too; fails fast during graceful shutdown.
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          livenessProbe:
+            # Process-only check: a DB outage must not restart every pod.
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if and (eq .Values.database.mode "external") .Values.database.external.caConfigMap }}
+            - name: db-ca
+              mountPath: /etc/ssl/database
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+        {{- if and (eq .Values.database.mode "external") .Values.database.external.caConfigMap }}
+        - name: db-ca
+          configMap:
+            name: {{ .Values.database.external.caConfigMap }}
+        {{- end }}
+      {{- with .Values.api.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

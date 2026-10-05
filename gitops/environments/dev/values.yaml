@@ -1,0 +1,39 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# DEV environment — deployed automatically by Argo CD on every merge to main.
+# `global.imageTag` is rewritten by the CI pipeline (.github/workflows/ci.yml).
+# ─────────────────────────────────────────────────────────────────────────────
+global:
+  imageTag: main
+
+api:
+  logLevel: debug
+  # Synthetic history so the dashboard is populated in a fresh environment.
+  seedDemoData: true
+  # /api/v1/load endpoint used to demonstrate the HPA.
+  enableLoadEndpoint: true
+  rollout:
+    enabled: true
+    steps:
+      - setWeight: 25
+      - pause: { duration: 1m }
+      - setWeight: 50
+      - pause: { duration: 1m }
+  autoscaling:
+    minReplicas: 2
+    maxReplicas: 6
+
+web:
+  autoscaling:
+    minReplicas: 2
+    maxReplicas: 4
+
+database:
+  mode: internal
+
+monitoring:
+  podMonitor:
+    enabled: true
+  prometheusRule:
+    enabled: true
+  grafanaDashboard:
+    enabled: true

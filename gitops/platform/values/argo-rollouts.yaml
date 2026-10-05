@@ -1,0 +1,13 @@
+controller:
+  replicas: 1
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+  # Shift canary traffic on Gateway API HTTPRoutes.
+  trafficRouterPlugins:
+    - name: argoproj-labs/gatewayAPI
+      location: https://github.com/argoproj-labs/rollouts-plugin-trafficrouter-gatewayapi/releases/download/v0.17.0/gatewayapi-plugin-linux-amd64
+# Rollouts UI: kubectl -n argo-rollouts port-forward svc/argo-rollouts-dashboard 3100:3100
+dashboard:
+  enabled: true

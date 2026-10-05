@@ -1,0 +1,6 @@
+# chart-testing / CI: defaults with an internal database
+database:
+  password: ci-only-password
+api:
+  ingestToken:
+    value: ci-only-ingest-token-0000

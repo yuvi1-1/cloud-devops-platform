@@ -1,0 +1,20 @@
+# Local kind cluster profile (scripts/kind-up.sh --gitops). Lighter add-on set,
+# throwaway credentials, NodePort gateway mapped to localhost:80.
+cluster:
+  provider: kind
+  name: cloud-devops
+  region: local
+
+gateway:
+  devHostname: dev.cloud-devops.localtest.me
+  prodHostname: cloud-devops.localtest.me
+
+environments:
+  prod:
+    enabled: false
+
+addons:
+  loki:
+    enabled: false
+  alloy:
+    enabled: false

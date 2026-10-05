@@ -1,0 +1,50 @@
+# Cluster-wide configuration that depends on the add-on CRDs: GatewayClass +
+# shared Gateway, ClusterIssuer, ClusterSecretStore, Kyverno policies, RBAC
+# for the Argo Rollouts Gateway API plugin.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-config
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  source:
+    repoURL: {{ .Values.repo.url }}
+    targetRevision: {{ .Values.repo.targetRevision }}
+    path: gitops/platform/config
+    helm:
+      valuesObject:
+        cluster:
+          {{- toYaml .Values.cluster | nindent 10 }}
+        gateway:
+          {{- toYaml .Values.gateway | nindent 10 }}
+        policies:
+          {{- toYaml .Values.policies | nindent 10 }}
+        appNamespaces:
+          {{- range $env := .Values.environments }}
+          {{- if $env.enabled }}
+          - {{ $env.namespace }}
+          {{- end }}
+          {{- end }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: envoy-gateway-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      # CRDs come from add-ons in earlier waves; skip dry-run until they exist.
+      - SkipDryRunOnMissingResource=true
+    retry:
+      limit: 20
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m

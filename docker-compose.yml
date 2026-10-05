@@ -1,0 +1,106 @@
+# Full local stack: web + api + PostgreSQL + Prometheus + Grafana.
+#   docker compose up --build
+#   Dashboard  → http://localhost:8080
+#   API        → http://localhost:3000/api/v1/dora
+#   Prometheus → http://localhost:9090
+#   Grafana    → http://localhost:3001  (anonymous viewer; admin/admin)
+name: cloud-devops
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: devops
+      POSTGRES_PASSWORD: devops
+      POSTGRES_DB: devops
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devops -d devops"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      args:
+        APP_VERSION: compose
+        GIT_COMMIT: local
+    environment:
+      DATABASE_URL: postgres://devops:devops@postgres:5432/devops
+      MIGRATE_ON_START: "true"
+      SEED_DEMO_DATA: "true"
+      INGEST_TOKEN: local-dev-ingest-token
+      ENABLE_LOAD_ENDPOINT: "true"
+      DEPLOY_ENVIRONMENT: compose
+      SHUTDOWN_DELAY_MS: "1000"
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/nodejs/bin/node", "-e", "fetch('http://127.0.0.1:3000/readyz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        APP_VERSION: compose
+        GIT_COMMIT: local
+    ports:
+      - "8080:8080"
+    volumes:
+      # In Kubernetes the Ingress routes /api; locally NGINX proxies it instead.
+      - ./deploy/compose/nginx-api-proxy.conf:/etc/nginx/snippets/api-proxy.conf:ro
+    tmpfs:
+      - /tmp
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+    volumes:
+      - ./deploy/compose/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./helm/cloud-devops/files/alert-rules.yaml:/etc/prometheus/rules.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on: [api]
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/cloud-devops-api.json
+    volumes:
+      - ./deploy/compose/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./helm/cloud-devops/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3001:3000"
+    depends_on: [prometheus]
+
+volumes:
+  pgdata:
