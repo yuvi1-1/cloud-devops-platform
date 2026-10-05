@@ -3,7 +3,7 @@
 # `global.imageTag` is rewritten by the CI pipeline (.github/workflows/ci.yml).
 # ─────────────────────────────────────────────────────────────────────────────
 global:
-  imageTag: da3aa45035c98835ece383c3cb27e72efddb416f
+  imageTag: 830c429fc1b4db5a030f714f598e27a5491c69fa
 api:
   logLevel: debug
   # Synthetic history so the dashboard is populated in a fresh environment.
