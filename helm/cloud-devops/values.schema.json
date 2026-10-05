@@ -533,13 +533,16 @@
         "enabled": {
           "type": "boolean"
         },
-        "ingressControllerNamespace": {
-          "type": "string"
-        },
         "monitoringNamespace": {
           "type": "string"
         },
         "databaseEgressCIDRs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ingressNamespaces": {
           "type": "array",
           "items": {
             "type": "string"
@@ -578,6 +581,32 @@
       "properties": {
         "image": {
           "type": "string"
+        }
+      }
+    },
+    "gateway": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "parentRefs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "name"
+            ]
+          }
+        },
+        "hostnames": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(\\*\\.)?[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
+          }
         }
       }
     }

@@ -1,0 +1,5 @@
+# terraform init -backend-config=environments/shared.s3.tfbackend
+# Replace <ACCOUNT_ID> with your AWS account id (bucket created by ../bootstrap).
+bucket = "cloud-devops-tfstate-<ACCOUNT_ID>"
+key    = "cloud-devops/shared/terraform.tfstate"
+region = "ap-south-1"

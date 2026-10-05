@@ -4,8 +4,8 @@
 {{- $v := index $.Values $component }}
 {{- if $v.enabled }}
 ---
-# One Ingress per component on the same host: "/" → web, "/api" → api.
-# Splitting them lets Argo Rollouts add a canary Ingress for the API only.
+# Classic Ingress fallback (gateway.enabled is the default). One Ingress per
+# component on the same host: "/" → web, "/api" → api.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -20,11 +20,10 @@ metadata:
     {{- if and (eq $component "web") $.Values.ingress.tls.enabled $.Values.ingress.tls.clusterIssuer }}
     cert-manager.io/cluster-issuer: {{ $.Values.ingress.tls.clusterIssuer }}
     {{- end }}
-    {{- if $.Values.ingress.tls.enabled }}
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    {{- end }}
 spec:
-  ingressClassName: {{ $.Values.ingress.className }}
+  {{- with $.Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
   {{- if $.Values.ingress.tls.enabled }}
   tls:
     - hosts:

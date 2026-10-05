@@ -119,8 +119,9 @@ api:
   affinity: {}
 
   # Progressive delivery with Argo Rollouts (requires the Argo Rollouts controller).
-  # When enabled the API is rendered as a Rollout instead of a Deployment and
-  # traffic is shifted through ingress-nginx canary annotations.
+  # When enabled the API is rendered as a Rollout instead of a Deployment. With
+  # gateway.enabled, traffic weights are shifted precisely on the HTTPRoute via the
+  # Argo Rollouts Gateway API plugin; otherwise the canary weight follows pod counts.
   rollout:
     enabled: false
     steps:
@@ -187,23 +188,35 @@ service:
   type: ClusterIP
   port: 80
 
-ingress:
+# Kubernetes Gateway API (the successor to Ingress; ingress-nginx was retired in 2026).
+# Routes "/" → web and "/api" → api on a shared Gateway owned by the platform team.
+gateway:
   enabled: true
-  className: nginx
+  parentRefs:
+    - name: platform-gateway
+      namespace: envoy-gateway-system
+  hostnames:
+    - cloud-devops.localtest.me
+
+# Classic Ingress, for clusters without a Gateway API implementation.
+ingress:
+  enabled: false
+  className: ""
   host: cloud-devops.localtest.me
-  annotations:
-    nginx.ingress.kubernetes.io/proxy-body-size: 1m
+  annotations: {}
   tls:
     enabled: false
     secretName: ""
     # cert-manager ClusterIssuer, e.g. letsencrypt-prod
     clusterIssuer: ""
 
-# Default-deny NetworkPolicies with explicit allows (ingress controller → web/api,
+# Default-deny NetworkPolicies with explicit allows (gateway → web/api,
 # api → postgres, Prometheus → api metrics, DNS egress).
 networkPolicy:
   enabled: true
-  ingressControllerNamespace: ingress-nginx
+  # Namespaces whose pods proxy external traffic (Envoy Gateway data plane / ingress controller)
+  ingressNamespaces:
+    - envoy-gateway-system
   monitoringNamespace: monitoring
   # Extra CIDRs the API may reach (e.g. RDS subnets); empty = any destination on 5432/443.
   databaseEgressCIDRs: []

@@ -1,0 +1,8 @@
+# kube-linter configuration (used in CI against rendered Helm output)
+checks:
+  addAllBuiltIn: false
+  exclude:
+    # Replicas are spread with topologySpreadConstraints (zone + hostname) instead.
+    - no-anti-affinity
+    # Image tags are pinned to immutable commit SHAs / digests by CI.
+    - latest-tag
