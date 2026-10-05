@@ -1,121 +1,151 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useState } from 'react';
+import { api } from './api';
+import { DeploymentChart } from './components/DeploymentChart';
+import { DeploymentsTable } from './components/DeploymentsTable';
+import { PlatformPanel } from './components/PlatformPanel';
+import { ServiceMatrix } from './components/ServiceMatrix';
+import { StatTile } from './components/StatTile';
+import { formatDuration, formatFrequency, formatPercent } from './format';
+import type { Environment } from './types';
+import { usePolling } from './usePolling';
 
-function App() {
-  const [count, setCount] = useState(0)
+const ENVIRONMENTS: Environment[] = ['prod', 'staging', 'dev'];
+const WINDOWS = [7, 30, 90];
+
+export default function App() {
+  const [env, setEnv] = useState<Environment>('prod');
+  const [days, setDays] = useState(30);
+  const [service, setService] = useState<string | null>(null);
+
+  const info = usePolling((s) => api.info(s), []);
+  const services = usePolling((s) => api.services(s), []);
+  const dora = usePolling((s) => api.dora(env, days, service, s), [env, days, service]);
+  const recent = usePolling((s) => api.deployments(env, service, 12, s), [env, service]);
+
+  const serviceNames = (services.data ?? []).map((r) => r.service);
+  const report = dora.data;
+  const apiDown = Boolean(info.error) && !info.loading;
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+    <div className="app">
+      <header className="topbar">
+        <div className="brand">
+          <img src="/favicon.svg" alt="" width={28} height={28} />
+          <div>
+            <h1>Cloud DevOps Platform</h1>
+            <p className="muted">Delivery performance across every environment</p>
+          </div>
         </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
+        <div className="topbar__status" aria-live="polite">
+          <span className={`dot ${apiDown ? 'dot--down' : 'dot--ok'}`} aria-hidden="true" />
+          {apiDown ? 'API unreachable' : `Live · ${info.data?.environment ?? '…'}`}
         </div>
-        <button
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+      </header>
 
-      <div className="ticks"></div>
+      <main>
+        <section className="filters" aria-label="Filters">
+          <div className="segmented" role="group" aria-label="Environment">
+            {ENVIRONMENTS.map((e) => (
+              <button key={e} type="button" aria-pressed={env === e} onClick={() => setEnv(e)}>
+                {e}
+              </button>
+            ))}
+          </div>
+          <div className="segmented" role="group" aria-label="Time window">
+            {WINDOWS.map((w) => (
+              <button key={w} type="button" aria-pressed={days === w} onClick={() => setDays(w)}>
+                {w}d
+              </button>
+            ))}
+          </div>
+          <label className="select">
+            <span>Service</span>
+            <select value={service ?? ''} onChange={(e) => setService(e.target.value || null)}>
+              <option value="">All services</option>
+              {serviceNames.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+        </section>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+        {dora.error && !report && (
+          <div className="alert" role="alert">
+            Could not load metrics from the API ({dora.error.message}). Retrying automatically…
+          </div>
+        )}
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+        <section className="tiles" aria-label="DORA metrics">
+          <StatTile
+            label="Deployment frequency"
+            value={formatFrequency(report?.deploymentFrequency.value ?? null)}
+            level={report?.deploymentFrequency.level ?? 'n/a'}
+            hint="Successful releases to this environment"
+          />
+          <StatTile
+            label="Lead time for changes"
+            value={formatDuration(report?.leadTimeForChanges.value ?? null)}
+            level={report?.leadTimeForChanges.level ?? 'n/a'}
+            hint="Median commit → running in environment"
+          />
+          <StatTile
+            label="Change failure rate"
+            value={formatPercent(report?.changeFailureRate.value ?? null)}
+            level={report?.changeFailureRate.level ?? 'n/a'}
+            hint="Deployments that failed or were rolled back"
+          />
+          <StatTile
+            label="Time to restore"
+            value={formatDuration(report?.timeToRestore.value ?? null)}
+            level={report?.timeToRestore.level ?? 'n/a'}
+            hint="Median failure → next successful deploy"
+          />
+        </section>
+
+        <section className="card">
+          <header className="card__head">
+            <h2 id="chart-title">Deployments per day</h2>
+            {report && (
+              <p className="muted">
+                {report.totals.deployments} deployments · {report.totals.succeeded} succeeded ·{' '}
+                {report.totals.failed} failed · last {report.windowDays} days
+              </p>
+            )}
+          </header>
+          {report ? <DeploymentChart data={report.daily} /> : <div className="skeleton" />}
+        </section>
+
+        <div className="grid-2">
+          <section className="card">
+            <header className="card__head">
+              <h2>Services by environment</h2>
+              <p className="muted">Latest release per environment</p>
+            </header>
+            <ServiceMatrix rows={services.data ?? []} />
+          </section>
+          <section className="card">
+            <header className="card__head">
+              <h2>Platform</h2>
+              <p className="muted">Refresh to watch load-balancing across pods</p>
+            </header>
+            <PlatformPanel info={info.data} healthy={!apiDown} />
+          </section>
+        </div>
+
+        <section className="card">
+          <header className="card__head">
+            <h2>Recent deployments</h2>
+            <p className="muted">{env}</p>
+          </header>
+          <DeploymentsTable items={recent.data ?? []} />
+        </section>
+      </main>
+
+      <footer className="footer muted">
+        Built with React · Fastify · PostgreSQL · Kubernetes (EKS) · Argo CD · Prometheus
+      </footer>
+    </div>
+  );
 }
-
-export default App
