@@ -44,15 +44,24 @@ resource "aws_iam_role" "github_actions" {
 }
 
 resource "aws_iam_role_policy" "github_actions" {
-  name = "eks-describe"
+  name = "cloud-devops-ci"
   role = aws_iam_role.github_actions.id
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Sid      = "DescribeCluster"
-      Effect   = "Allow"
-      Action   = ["eks:DescribeCluster"]
-      Resource = module.eks.cluster_arn
-    }]
+    Statement = [
+      {
+        Sid      = "DescribeCluster"
+        Effect   = "Allow"
+        Action   = ["eks:DescribeCluster"]
+        Resource = module.eks.cluster_arn
+      },
+      {
+        # The deployment tracker reads the ingest token to report DORA events.
+        Sid      = "ReadIngestToken"
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = aws_secretsmanager_secret.ingest_token.arn
+      },
+    ]
   })
 }

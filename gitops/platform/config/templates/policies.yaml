@@ -1,13 +1,6 @@
+{{- if .Values.policies.enabled }}
 {{- $action := .Values.policies.validationFailureAction }}
 {{- $ns := .Values.appNamespaces }}
-{{- define "platform.match" -}}
-match:
-  any:
-    - resources:
-        kinds: [Pod]
-        namespaces:
-          {{- toYaml . | nindent 10 }}
-{{- end }}
 # Kyverno policy-as-code guardrails for the application namespaces. Rules on
 # Pods are auto-generated for Deployments, StatefulSets, Jobs and Rollouts.
 # Start in Audit (PolicyReports only); switch policies.validationFailureAction
@@ -176,3 +169,4 @@ spec:
                     issuer: https://token.actions.githubusercontent.com
                     rekor:
                       url: https://rekor.sigstore.dev
+{{- end }}

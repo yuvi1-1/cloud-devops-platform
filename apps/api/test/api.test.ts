@@ -175,6 +175,21 @@ describe('HTTP API', () => {
   });
 });
 
+describe('chaos mode', () => {
+  it('injects HTTP 500s on API routes but never on probes', async () => {
+    const app = await buildApp({
+      config: loadConfig({ NODE_ENV: 'test', LOG_LEVEL: 'silent', CHAOS_ERROR_RATE: '1' }),
+      repo: new MemoryRepository(),
+    });
+    expect((await app.inject('/api/v1/info')).statusCode).toBe(500);
+    expect((await app.inject('/healthz')).statusCode).toBe(200);
+    expect((await app.inject('/readyz')).statusCode).toBe(200);
+    const metrics = await app.inject('/metrics');
+    expect(metrics.body).toContain('status_code="500"');
+    await app.close();
+  });
+});
+
 describe('config', () => {
   it('rejects invalid configuration', () => {
     expect(() => loadConfig({ PORT: 'not-a-port' })).toThrow(/Invalid configuration/);

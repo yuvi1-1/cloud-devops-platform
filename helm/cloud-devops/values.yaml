@@ -78,6 +78,9 @@ api:
   enableLoadEndpoint: false
   rateLimitPerMinute: 600
   shutdownDelayMs: 5000
+  # Fault injection: share (0-1) of /api/v1 requests that return HTTP 500.
+  # Demo only — set it on a new release to watch the canary analysis roll it back.
+  chaosErrorRate: 0
   extraEnv: []
 
   # Bearer token CI/CD uses to POST deployment events.

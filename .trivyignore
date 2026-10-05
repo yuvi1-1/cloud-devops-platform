@@ -1,0 +1,2 @@
+# Trivy suppressions — every entry needs a justification and an expiry review.
+# Format: <ID>  # reason (reviewed YYYY-MM-DD)

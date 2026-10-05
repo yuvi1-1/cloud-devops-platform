@@ -117,6 +117,10 @@ app.kubernetes.io/component: {{ .component }}
   value: {{ .Values.api.rateLimitPerMinute | quote }}
 - name: SHUTDOWN_DELAY_MS
   value: {{ .Values.api.shutdownDelayMs | quote }}
+{{- if .Values.api.chaosErrorRate }}
+- name: CHAOS_ERROR_RATE
+  value: {{ .Values.api.chaosErrorRate | quote }}
+{{- end }}
 - name: POD_NAME
   valueFrom:
     fieldRef:

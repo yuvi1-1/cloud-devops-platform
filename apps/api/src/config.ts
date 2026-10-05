@@ -31,6 +31,11 @@ const EnvSchema = z.object({
   SEED_DEMO_DATA: booleanFromEnv,
   ENABLE_LOAD_ENDPOINT: booleanFromEnv,
   RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(600),
+  /**
+   * Fault injection for demos: share (0-1) of /api/v1 requests answered with
+   * HTTP 500. Used to show Argo Rollouts aborting a bad canary automatically.
+   */
+  CHAOS_ERROR_RATE: z.coerce.number().min(0).max(1).default(0),
 
   /** Time to keep serving after SIGTERM while readiness reports 503 (lets endpoints drain). */
   SHUTDOWN_DELAY_MS: z.coerce.number().int().min(0).default(5000),

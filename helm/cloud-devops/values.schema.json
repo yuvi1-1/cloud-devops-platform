@@ -383,6 +383,19 @@
               }
             }
           }
+        },
+        "chaosErrorRate": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            {
+              "type": "string",
+              "pattern": "^(0(\\.[0-9]+)?|1(\\.0+)?)$"
+            }
+          ]
         }
       }
     },
