@@ -23,7 +23,7 @@ RUN npm run build --workspace apps/web
 
 
 # Stage 2 — serve with unprivileged NGINX (runs as UID 101 on port 8080)
-FROM nginxinc/nginx-unprivileged:1.30-alpine AS runtime
+FROM nginxinc/nginx-unprivileged:1.31-alpine AS runtime
 
 ARG APP_VERSION=dev
 ARG GIT_COMMIT=local
